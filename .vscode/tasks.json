@@ -1,0 +1,19 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Start QXVault Development Server",
+			"type": "shell",
+			"command": "wrangler",
+			"args": [
+				"dev",
+				"worker.js",
+				"--port",
+				"8787"
+			],
+			"group": "build",
+			"isBackground": true,
+			"problemMatcher": []
+		}
+	]
+}
