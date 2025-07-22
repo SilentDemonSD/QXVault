@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QXVault - Quantum-Secure Password Manager</title>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@300;400;700;900&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
+    <link rel="stylesheet" href="/style.css">
+    <script src="/script.js" defer></script>
+</head>
+<body>
+    <div class="quantum-bg"></div>
+    
+    <nav class="navbar">
+        <div class="nav-container">
+            <a href="#" class="logo">QXVault</a>
+            <div class="nav-tabs" id="navTabs">
+                <button class="nav-tab active" data-tab="home">Home</button>
+                <button class="nav-tab" data-tab="about">About</button>
+                <button class="nav-tab" data-tab="faq">FAQ</button>
+                <button class="nav-tab" data-tab="different">How It's Different</button>
+                <button class="nav-tab" data-tab="trust">Why Trust Us</button>
+                <button class="nav-tab" data-tab="terms">T&C</button>
+                <button class="nav-tab" data-tab="source">Source Code</button>
+            </div>
+            <div class="nav-controls">
+                <button class="theme-toggle" onclick="toggleTheme()" id="themeToggle">
+                    <span class="material-icons-round">dark_mode</span>
+                </button>
+                <button class="mobile-menu-btn" id="mobileMenuBtn">☰</button>
+            </div>
+        </div>
+    </nav>
+    
+    <div class="container">
+        <!-- Home Tab -->
+        <div id="home" class="tab-content active">
+            <div class="hero">
+                <h1>QXVault</h1>
+                <p class="tagline">Quantum-Secure • Serverless • Deterministic Password Manager</p>
+            </div>
+            
+            <div class="card">
+                <h2>
+                    Generate Quantum-Secure Password
+                    <button class="info-btn" type="button">
+                        i
+                        <div class="tooltip">Create cryptographically secure passwords using post-quantum algorithms that are resistant to both classical and quantum computer attacks.</div>
+                    </button>
+                </h2>
+                <div id="passwordForm">
+                    <div class="form-group">
+                        <label class="form-label">
+                            Master Passphrase
+                            <button class="info-btn" type="button">
+                                i
+                                <div class="tooltip">Your master secret that combines with device-specific WebAuthn data through Post-Quantum Cryptography (PQC) to generate unique, quantum-resistant passwords. Enhanced with Kyber-style KEM and HKDF for maximum security.</div>
+                            </button>
+                        </label>
+                        <div class="password-input-container">
+                            <input type="password" id="masterPassphrase" class="form-input" placeholder="Enter your master passphrase" required autocomplete="current-password">
+                            <button type="button" class="password-toggle" onclick="togglePasswordVisibility()">
+                                <span class="material-icons-round" id="passwordToggleIcon">visibility_off</span>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">
+                            Site/Service Name
+                            <button class="info-btn" type="button">
+                                i
+                                <div class="tooltip">The website or service name (e.g., gmail.com, facebook.com). This ensures each site gets a unique password.</div>
+                            </button>
+                        </label>
+                        <input type="text" id="siteName" class="form-input" placeholder="e.g., gmail.com, facebook.com" required autocomplete="off">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">
+                            Username/Email (Optional)
+                            <button class="info-btn" type="button">
+                                i
+                                <div class="tooltip">Optional: Include your username or email to generate different passwords for multiple accounts on the same site.</div>
+                            </button>
+                        </label>
+                        <input type="email" id="userEmail" class="form-input" placeholder="user@example.com" autocomplete="email">
+                    </div>
+                    
+                    <div class="btn-group">
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <button type="button" id="generateHardwareBtn" class="btn btn-primary">
+                                <span class="material-icons-round">security</span>
+                                Generate QX Hardware Pass
+                            </button>
+                            <button class="info-btn" type="button">
+                                i
+                                <div class="tooltip">Quantum-secure + Device-bound: Uses hardware authentication (Touch ID, Face ID, or security key) to create a unique password per device. Most secure option - same password every time on THIS device only.</div>
+                            </button>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <button type="button" id="generateBasicBtn" class="btn">
+                                <span class="material-icons-round">key</span>
+                                Generate QX Normal Pass
+                            </button>
+                            <button class="info-btn" type="button">
+                                i
+                                <div class="tooltip">Quantum-secure, not device-bound: Works on any device without hardware authentication. Same password on all devices with same inputs. Good security, maximum compatibility.</div>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="status" class="status hidden"></div>
+                
+                <div class="form-group">
+                    <label class="form-label">
+                        Generated Password
+                        <button class="info-btn" type="button">
+                            i
+                            <div class="tooltip">Your quantum-secure password. Click copy to safely transfer it to your password field. It will be the same every time with the same inputs.</div>
+                        </button>
+                    </label>
+                    <div id="passwordOutput" class="password-output">Click generate to create your quantum-secure password</div>
+                </div>
+                
+                <div class="btn-group">
+                    <button type="button" id="copyBtn" class="btn" disabled>
+                        <span class="material-icons-round">content_copy</span>
+                        Copy Password
+                    </button>
+                    <button type="button" id="clearBtn" class="btn">
+                        <span class="material-icons-round">clear_all</span>
+                        Clear All
+                    </button>
+                    <button type="button" id="skipAuthBtn" class="btn hidden">
+                        <span class="material-icons-round">skip_next</span>
+                        Skip Hardware Auth
+                    </button>
+                </div>
+            </div>
+            
+            <div class="card">
+                <div class="settings-header">
+                    <h3>
+                        Password Settings
+                        <button class="info-btn" type="button">
+                            i
+                            <div class="tooltip">Customize your password generation preferences. These settings are saved locally in your browser.</div>
+                        </button>
+                    </h3>
+                    <button class="minimize-btn" id="settingsMinimize" type="button">+</button>
+                </div>
+                <div class="settings-content collapsed" id="settingsContent">
+                    <div class="settings-grid">
+                        <div class="settings-card">
+                            <div class="form-group">
+                                <label class="form-label">
+                                    Password Length
+                                    <button class="info-btn" type="button">
+                                        i
+                                        <div class="tooltip">Longer passwords are more secure. We recommend at least 16 characters for optimal security.</div>
+                                    </button>
+                                </label>
+                                <div class="slider-container">
+                                    <div class="slider-wrapper">
+                                        <div class="slider-track-container">
+                                            <input type="range" id="passwordLength" class="slider-input" min="12" max="64" value="32" step="1">
+                                        </div>
+                                        <div class="slider-value-display" id="lengthValue">32</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="settings-card">
+                            <div class="form-group">
+                                <label class="form-label">
+                                    Include Special Characters
+                                    <button class="info-btn" type="button">
+                                        i
+                                        <div class="tooltip">Special characters increase password complexity and security. Some sites may not accept all special characters.</div>
+                                    </button>
+                                </label>
+                                <div class="switch-container">
+                                    <input type="checkbox" id="includeSpecial" class="switch-input" checked>
+                                    <div class="switch"></div>
+                                    <span>Symbols & Punctuation</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="settings-card">
+                            <div class="form-group">
+                                <label class="form-label">
+                                    Quantum Resistance Level
+                                    <button class="info-btn" type="button">
+                                        i
+                                        <div class="tooltip">Higher levels use more PQC rounds with simulated Kyber KEM operations for enhanced quantum resistance. Combines with device-specific WebAuthn secrets for maximum security.</div>
+                                    </button>
+                                </label>
+                                <div class="slider-container">
+                                    <div class="slider-wrapper">
+                                        <div class="slider-track-container">
+                                            <input type="range" id="quantumLevel" class="slider-input" min="1" max="5" value="3" step="1">
+                                        </div>
+                                        <div class="slider-value-display" id="quantumLevelValue">3</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="settings-card">
+                            <div class="form-group">
+                                <label class="form-label">
+                                    Auto-Clear Sensitive Data
+                                    <button class="info-btn" type="button">
+                                        i
+                                        <div class="tooltip">Automatically clear your master passphrase and generated password after a specified time for enhanced security.</div>
+                                    </button>
+                                </label>
+                                <div class="switch-container">
+                                    <input type="checkbox" id="autoClear" class="switch-input" checked>
+                                    <div class="switch"></div>
+                                    <span>Clear after 5 minutes</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- About Tab -->
+        <div id="about" class="tab-content">
+            <div class="card">
+                <h2>
+                    About QXVault
+                    <button class="info-btn" type="button">
+                        i
+                        <div class="tooltip">Learn about QXVault's innovative approach to password management in the quantum computing era.</div>
+                    </button>
+                </h2>
+                <p>QXVault is a next-generation password manager designed for the quantum computing era. Unlike traditional password managers that store your passwords in encrypted databases, QXVault generates your passwords deterministically on-demand using post-quantum cryptographic algorithms.</p>
+                
+                <h3>🚀 Key Features</h3>
+                <ul>
+                    <li><strong>Quantum-Secure:</strong> Uses post-quantum cryptographic principles resistant to both classical and quantum attacks</li>
+                    <li><strong>Serverless:</strong> No databases, no storage, no single point of failure</li>
+                    <li><strong>Deterministic:</strong> Same inputs always generate the same password</li>
+                    <li><strong>Hardware Security:</strong> WebAuthn integration for hardware-based authentication</li>
+                    <li><strong>Zero-Knowledge:</strong> We never see or store your passwords or passphrases</li>
+                    <li><strong>Cross-Platform:</strong> Works identically on any device with a modern browser</li>
+                </ul>
+                
+                <h3>🔬 Technology Stack</h3>
+                <div class="settings-grid">
+                    <div class="settings-card">
+                        <h4>Cryptography</h4>
+                        <ul>
+                            <li>Post-Quantum Key Derivation</li>
+                            <li>PBKDF2 with SHA-512</li>
+                            <li>100,000+ iterations</li>
+                            <li>Hardware entropy integration</li>
+                        </ul>
+                    </div>
+                    <div class="settings-card">
+                        <h4>Security</h4>
+                        <ul>
+                            <li>WebAuthn/FIDO2 support</li>
+                            <li>Client-side processing only</li>
+                            <li>No data transmission</li>
+                            <li>Memory-safe operations</li>
+                        </ul>
+                    </div>
+                    <div class="settings-card">
+                        <h4>Platform</h4>
+                        <ul>
+                            <li>Cloudflare Edge computing</li>
+                            <li>Progressive Web App</li>
+                            <li>Offline-first design</li>
+                            <li>Material 3 UI framework</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- FAQ Tab -->
+        <div id="faq" class="tab-content">
+            <div class="card">
+                <h2>
+                    Frequently Asked Questions
+                    <button class="info-btn" type="button">
+                        i
+                        <div class="tooltip">Common questions about QXVault's functionality, security, and usage.</div>
+                    </button>
+                </h2>
+                
+                <div class="faq-item">
+                    <div class="faq-question">What's the difference between QX Hardware Pass and QX Normal Pass?</div>
+                    <div class="faq-answer">
+                        <strong>🔐 QX Hardware Pass (Recommended):</strong><br>
+                        • Uses hardware authentication (Touch ID, Face ID, security keys, fingerprint)<br>
+                        • Binds passwords to YOUR specific device using cryptographic hardware<br>
+                        • Same inputs = same password, but ONLY on this device<br>
+                        • Maximum security: Device-specific, quantum-secure, hardware-backed<br>
+                        • Setup required once per device<br><br>
+                        
+                        <strong>🔑 QX Normal Pass:</strong><br>
+                        • Works on any device without hardware authentication<br>
+                        • Same inputs = same password across ALL devices<br>
+                        • Good security: Quantum-secure but not device-bound<br>
+                        • Maximum compatibility and convenience<br>
+                        • No setup required, works immediately<br><br>
+                        
+                        <strong>When to use which:</strong><br>
+                        • Use <em>QX Hardware Pass</em> for maximum security on your personal devices<br>
+                        • Use <em>QX Normal Pass</em> when accessing from shared/public computers or when hardware auth isn't available
+                    </div>
+                </div>
+                
+                <div class="faq-item">
+                    <div class="faq-question">How does deterministic password generation work?</div>
+                    <div class="faq-answer">QXVault combines your master passphrase, site name, and (optionally) hardware key authentication to generate a unique password for each site. The same inputs will always produce the same password, eliminating the need to store passwords.</div>
+                </div>
+                
+                <div class="faq-item">
+                    <div class="faq-question">What makes it quantum-secure?</div>
+                    <div class="faq-answer">We use post-quantum cryptographic algorithms that are designed to be resistant to attacks from both classical and quantum computers, ensuring your passwords remain secure even in the quantum computing era.</div>
+                </div>
+                
+                <div class="faq-item">
+                    <div class="faq-question">Do I need a hardware security key?</div>
+                    <div class="faq-answer">No, hardware authentication is optional. Use "QX Hardware Pass" for maximum security with device-bound passwords, or "QX Normal Pass" for convenience without hardware requirements. Both use quantum-secure cryptography.</div>
+                </div>
+                
+                <div class="faq-item">
+                    <div class="faq-question">What happens if I lose access to my hardware authentication?</div>
+                    <div class="faq-answer">If you used "QX Hardware Pass", those passwords are device-specific and can't be recovered without the original device. Always use "QX Normal Pass" for backup access, or keep backup devices configured. For maximum flexibility, use "QX Normal Pass" primarily and "QX Hardware Pass" only for high-security accounts.</div>
+                </div>
+                
+                <div class="faq-item">
+                    <div class="faq-question">Can I use this offline?</div>
+                    <div class="faq-answer">Yes! Once loaded, QXVault works completely offline. All cryptographic operations happen locally in your browser. No internet connection is required for password generation.</div>
+                </div>
+                
+                <div class="faq-item">
+                    <div class="faq-question">How do I change a compromised password?</div>
+                    <div class="faq-answer">Simply add a version number or suffix to the site name (e.g., "gmail.com-v2"). This will generate a completely different password while keeping your master passphrase the same.</div>
+                </div>
+                
+                <div class="faq-item">
+                    <div class="faq-question">Is my data private?</div>
+                    <div class="faq-answer">Absolutely. QXVault processes everything locally in your browser. Your master passphrase, passwords, and personal data never leave your device. We literally cannot see your data.</div>
+                </div>
+                
+                <div class="faq-item">
+                    <div class="faq-question">What browsers are supported?</div>
+                    <div class="faq-answer">QXVault works on all modern browsers that support WebCrypto API and WebAuthn. This includes Chrome, Firefox, Safari, Edge, and their mobile versions.</div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- How It's Different Tab -->
+        <div id="different" class="tab-content">
+            <div class="card">
+                <h2>How QXVault is Different</h2>
+                
+                <h3>Traditional Password Managers</h3>
+                <ul>
+                    <li>Store encrypted passwords in databases</li>
+                    <li>Single point of failure (server breaches)</li>
+                    <li>Require constant syncing across devices</li>
+                    <li>Vulnerable to quantum computing attacks</li>
+                    <li>Depend on third-party servers</li>
+                </ul>
+                
+                <h3>QXVault Approach</h3>
+                <ul>
+                    <li>Generates passwords on-demand mathematically</li>
+                    <li>No storage, no databases, no servers to hack</li>
+                    <li>Works identically on any device</li>
+                    <li>Quantum-resistant cryptography</li>
+                    <li>Completely serverless and decentralized</li>
+                </ul>
+                
+                <h3>Two Security Modes</h3>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 15px;">
+                    <div style="padding: 15px; border: 1px solid var(--border-primary); border-radius: 8px;">
+                        <h4 style="color: var(--accent-cyan); margin-bottom: 10px;">🔒 QX Hardware Pass</h4>
+                        <ul style="margin: 0; font-size: 14px;">
+                            <li>Device-bound security</li>
+                            <li>Uses Touch ID/Face ID/Security keys</li>
+                            <li>Unique passwords per device</li>
+                            <li>Maximum security</li>
+                            <li>Same inputs = same password on THIS device only</li>
+                        </ul>
+                    </div>
+                    <div style="padding: 15px; border: 1px solid var(--border-primary); border-radius: 8px;">
+                        <h4 style="color: var(--accent-purple); margin-bottom: 10px;">🔑 QX Normal Pass</h4>
+                        <ul style="margin: 0; font-size: 14px;">
+                            <li>Cross-device compatibility</li>
+                            <li>No hardware requirements</li>
+                            <li>Same passwords on all devices</li>
+                            <li>Good security + convenience</li>
+                            <li>Same inputs = same password everywhere</li>
+                        </ul>
+                    </div>
+                </div>
+                
+                <h3>Security Advantages</h3>
+                <ul>
+                    <li><strong>No Data Breaches:</strong> Nothing to steal - passwords exist only when generated</li>
+                    <li><strong>Future-Proof:</strong> Designed to resist quantum computing attacks</li>
+                    <li><strong>Hardware-Backed:</strong> Optional hardware security key integration</li>
+                    <li><strong>Zero Trust:</strong> You don't need to trust us with your data</li>
+                </ul>
+            </div>
+        </div>
+        
+        <!-- Why Trust Us Tab -->
+        <div id="trust" class="tab-content">
+            <div class="card">
+                <h2>Why Trust QXVault</h2>
+                
+                <h3>Open Source Transparency</h3>
+                <p>QXVault is completely open source. You can inspect every line of code, verify the cryptographic implementations, and even run your own version.</p>
+                
+                <h3>Zero-Knowledge Architecture</h3>
+                <p>We designed QXVault so that we never see, store, or have access to your master passphrase, passwords, or any sensitive data. Everything happens locally in your browser.</p>
+                
+                <h3>Cryptographic Principles</h3>
+                <ul>
+                    <li>Post-quantum cryptographic algorithms</li>
+                    <li>Industry-standard WebAuthn for hardware authentication</li>
+                    <li>AES-GCM encryption with PBKDF2 key derivation</li>
+                    <li>Multiple rounds of cryptographic hardening</li>
+                </ul>
+                
+                <h3>No Vendor Lock-in</h3>
+                <p>Since your passwords are generated deterministically, you're never locked into using QXVault. You can implement the same algorithm anywhere or use our open-source code.</p>
+                
+                <h3>Serverless by Design</h3>
+                <p>There are no servers to compromise, no databases to breach, and no infrastructure to maintain. The entire system runs in your browser or on Cloudflare's edge network.</p>
+            </div>
+        </div>
+        
+        <!-- Terms & Conditions Tab -->
+        <div id="terms" class="tab-content">
+            <div class="card">
+                <h2>Terms & Conditions</h2>
+                
+                <h3>1. Service Description</h3>
+                <p>QXVault provides a quantum-secure, deterministic password generation service that operates entirely client-side without storing user data.</p>
+                
+                <h3>2. User Responsibilities</h3>
+                <ul>
+                    <li>You are solely responsible for remembering your master passphrase</li>
+                    <li>You must securely store backup hardware security keys</li>
+                    <li>You acknowledge that forgotten passphrases cannot be recovered</li>
+                </ul>
+                
+                <h3>3. Privacy & Data</h3>
+                <ul>
+                    <li>We do not collect, store, or have access to your passwords or passphrases</li>
+                    <li>All cryptographic operations occur locally in your browser</li>
+                    <li>We may collect anonymous usage analytics for service improvement</li>
+                </ul>
+                
+                <h3>4. Security Disclaimer</h3>
+                <p>While QXVault uses state-of-the-art cryptographic methods, no system is 100% secure. Users should follow security best practices and maintain backup access methods.</p>
+                
+                <h3>5. Service Availability</h3>
+                <p>We provide this service "as is" without warranties. We are not liable for service interruptions or data loss.</p>
+                
+                <h3>6. Open Source License</h3>
+                <p>QXVault is licensed under MIT License. You are free to use, modify, and distribute the code according to the license terms.</p>
+            </div>
+        </div>
+        
+        <!-- Source Code Tab -->
+        <div id="source" class="tab-content">
+            <div class="card">
+                <h2>Source Code & Links</h2>
+                
+                <h3>Repository</h3>
+                <p>Full source code is available on GitHub:</p>
+                <a href="https://github.com/qxvault/qxvault" class="btn" target="_blank">View on GitHub</a>
+                
+                <h3>Documentation</h3>
+                <ul>
+                    <li><a href="https://qxvault.dev/docs" target="_blank">Technical Documentation</a></li>
+                    <li><a href="https://qxvault.dev/security" target="_blank">Security Whitepaper</a></li>
+                    <li><a href="https://qxvault.dev/api" target="_blank">API Reference</a></li>
+                </ul>
+                
+                <h3>Community</h3>
+                <ul>
+                    <li><a href="https://discord.gg/qxvault" target="_blank">Discord Community</a></li>
+                    <li><a href="https://reddit.com/r/qxvault" target="_blank">Reddit Community</a></li>
+                    <li><a href="https://twitter.com/qxvault" target="_blank">Twitter Updates</a></li>
+                </ul>
+                
+                <h3>Bug Reports & Feature Requests</h3>
+                <p>Found a bug or have a feature request?</p>
+                <a href="https://github.com/qxvault/qxvault/issues" class="btn" target="_blank">Report Issues</a>
+            </div>
+        </div>
+    </div>
+    
+    <footer class="footer">
+        <div class="footer-content">
+            <p>&copy; 2025 QXVault. All rights reserved.</p>
+        </div>
+    </footer>
+</body>
+</html>

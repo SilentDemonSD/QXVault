@@ -1,0 +1,8 @@
+name = "qxvault"
+compatibility_date = "2025-07-17"
+
+main = "src/worker.js"
+
+[assets]
+directory = "public"
+binding = "ASSETS"
