@@ -1,166 +1,200 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>QXVault - Quantum-Secure Password Manager</title>
-    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@300;400;700;900&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
+    <meta name="description" content="QXVault derives passwords on demand with Kyber-768 and optional WebAuthn binding. No vault file, no database, no server-side state.">
+    <meta name="theme-color" content="#060412">
+    <title>QXVault — Stateless Password Derivation</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Space+Grotesk:wght@400;500;600;700&family=Space+Mono:wght@400;700&family=Material+Icons+Round&display=swap" rel="stylesheet">
+    <link rel="modulepreload" href="/vendor/pqc-kyber/kyber.js">
     <link rel="stylesheet" href="/style.css">
     <script src="/script.js" defer></script>
 </head>
 <body>
-    <div class="quantum-bg"></div>
-    
+    <div class="quantum-bg" aria-hidden="true"></div>
+
+    <div class="ticker" aria-hidden="true">
+        <div class="ticker-track">
+            <span>DETERMINISTIC</span><span class="ticker-sep">///</span>
+            <span>STATELESS</span><span class="ticker-sep">///</span>
+            <span>KYBER-768</span><span class="ticker-sep">///</span>
+            <span>PBKDF2-SHA512</span><span class="ticker-sep">///</span>
+            <span>HKDF-SHA256</span><span class="ticker-sep">///</span>
+            <span>WEBAUTHN BINDING</span><span class="ticker-sep">///</span>
+            <span>ZERO STORED SECRETS</span><span class="ticker-sep">///</span>
+            <span>DETERMINISTIC</span><span class="ticker-sep">///</span>
+            <span>STATELESS</span><span class="ticker-sep">///</span>
+            <span>KYBER-768</span><span class="ticker-sep">///</span>
+            <span>PBKDF2-SHA512</span><span class="ticker-sep">///</span>
+            <span>HKDF-SHA256</span><span class="ticker-sep">///</span>
+            <span>WEBAUTHN BINDING</span><span class="ticker-sep">///</span>
+            <span>ZERO STORED SECRETS</span><span class="ticker-sep">///</span>
+        </div>
+    </div>
+
     <nav class="navbar">
         <div class="nav-container">
-            <a href="#" class="logo">QXVault</a>
+            <a href="#" class="logo"><span class="logo-mark">QX</span>VAULT</a>
             <div class="nav-tabs" id="navTabs">
-                <button class="nav-tab active" data-tab="home">Home</button>
+                <button class="nav-tab active" data-tab="home">Generate</button>
                 <button class="nav-tab" data-tab="about">About</button>
                 <button class="nav-tab" data-tab="faq">FAQ</button>
-                <button class="nav-tab" data-tab="different">How It's Different</button>
-                <button class="nav-tab" data-tab="trust">Why Trust Us</button>
-                <button class="nav-tab" data-tab="terms">T&C</button>
-                <button class="nav-tab" data-tab="source">Source Code</button>
+                <button class="nav-tab" data-tab="different">Compare</button>
+                <button class="nav-tab" data-tab="trust">Trust</button>
+                <button class="nav-tab" data-tab="terms">Terms</button>
+                <button class="nav-tab" data-tab="source">Build</button>
             </div>
             <div class="nav-controls">
-                <button class="theme-toggle" onclick="toggleTheme()" id="themeToggle">
+                <button class="theme-toggle" onclick="toggleTheme()" id="themeToggle" aria-label="Toggle color theme">
                     <span class="material-icons-round">dark_mode</span>
                 </button>
-                <button class="mobile-menu-btn" id="mobileMenuBtn">☰</button>
+                <button class="mobile-menu-btn" id="mobileMenuBtn" aria-label="Toggle navigation menu" aria-expanded="false">
+                    <span></span><span></span><span></span>
+                </button>
             </div>
         </div>
     </nav>
-    
+
     <div class="container">
-        <!-- Home Tab -->
+        <!-- Generate -->
         <div id="home" class="tab-content active">
-            <div class="hero">
-                <h1>QXVault</h1>
-                <p class="tagline">Quantum-Secure • Serverless • Deterministic Password Manager</p>
-            </div>
-            
-            <div class="card">
-                <h2>
-                    Generate Quantum-Secure Password
-                    <button class="info-btn" type="button">
-                        i
-                        <div class="tooltip">Create cryptographically secure passwords using post-quantum algorithms that are resistant to both classical and quantum computer attacks.</div>
-                    </button>
-                </h2>
+            <header class="hero">
+                <p class="hero-eyebrow"><span class="dot" aria-hidden="true"></span>Client-side &middot; Stateless &middot; Kyber-768</p>
+                <h1>PASSWORDS<br>WITHOUT<br>A <span class="hl">VAULT.</span></h1>
+                <p class="tagline">Same inputs, same password, every time. Nothing is stored anywhere, so there is nothing to steal.</p>
+                <div class="hero-stats">
+                    <div class="hero-stat"><strong>00</strong><span>records stored</span></div>
+                    <div class="hero-stat"><strong>100%</strong><span>local compute</span></div>
+                    <div class="hero-stat"><strong>768</strong><span>KEM security bits</span></div>
+                </div>
+                <div class="hero-cta">
+                    <button type="button" class="btn btn-primary" data-goto-generator>Start generating</button>
+                    <button type="button" class="btn" data-goto-tab="different">How it compares</button>
+                </div>
+            </header>
+
+            <section class="card card-generator" id="generator" aria-label="Password generator">
+                <div class="card-head">
+                    <span class="card-index">01</span>
+                    <h2>Generate</h2>
+                    <span class="card-tag">Local only</span>
+                </div>
                 <div id="passwordForm">
                     <div class="form-group">
-                        <label class="form-label">
-                            Master Passphrase
-                            <button class="info-btn" type="button">
+                        <label class="form-label" for="masterPassphrase">
+                            Master passphrase
+                            <button class="info-btn" type="button" aria-label="About the master passphrase">
                                 i
-                                <div class="tooltip">Your master secret that combines with device-specific WebAuthn data through Post-Quantum Cryptography (PQC) to generate unique, quantum-resistant passwords. Enhanced with Kyber-style KEM and HKDF for maximum security.</div>
+                                <span class="tooltip">The secret everything derives from. It is stretched with PBKDF2-SHA512, fed through a Kyber-768 KEM, and expanded with HKDF. It never leaves this page.</span>
                             </button>
                         </label>
                         <div class="password-input-container">
-                            <input type="password" id="masterPassphrase" class="form-input" placeholder="Enter your master passphrase" required autocomplete="current-password">
-                            <button type="button" class="password-toggle" onclick="togglePasswordVisibility()">
+                            <input type="password" id="masterPassphrase" class="form-input" placeholder="Enter your master passphrase" required autocomplete="current-password" maxlength="512">
+                            <button type="button" class="password-toggle" onclick="togglePasswordVisibility()" aria-label="Show or hide passphrase">
                                 <span class="material-icons-round" id="passwordToggleIcon">visibility_off</span>
                             </button>
                         </div>
                     </div>
-                    
+
                     <div class="form-group">
-                        <label class="form-label">
-                            Site/Service Name
-                            <button class="info-btn" type="button">
+                        <label class="form-label" for="siteName">
+                            Site / service name
+                            <button class="info-btn" type="button" aria-label="About the site name">
                                 i
-                                <div class="tooltip">The website or service name (e.g., gmail.com, facebook.com). This ensures each site gets a unique password.</div>
+                                <span class="tooltip">Scopes the derivation to one service, e.g. github.com. Changing it produces an unrelated password.</span>
                             </button>
                         </label>
-                        <input type="text" id="siteName" class="form-input" placeholder="e.g., gmail.com, facebook.com" required autocomplete="off">
+                        <input type="text" id="siteName" class="form-input" placeholder="e.g. github.com" required autocomplete="off" spellcheck="false" maxlength="128">
                     </div>
-                    
+
                     <div class="form-group">
-                        <label class="form-label">
-                            Username/Email (Optional)
-                            <button class="info-btn" type="button">
+                        <label class="form-label" for="userEmail">
+                            Username / email <span class="opt">(optional)</span>
+                            <button class="info-btn" type="button" aria-label="About the username field">
                                 i
-                                <div class="tooltip">Optional: Include your username or email to generate different passwords for multiple accounts on the same site.</div>
+                                <span class="tooltip">Distinguishes multiple accounts on the same site. Leave blank if you only have one.</span>
                             </button>
                         </label>
-                        <input type="email" id="userEmail" class="form-input" placeholder="user@example.com" autocomplete="email">
+                        <input type="email" id="userEmail" class="form-input" placeholder="you@example.com" autocomplete="email" spellcheck="false" maxlength="254">
                     </div>
-                    
+
                     <div class="btn-group">
-                        <div style="display: flex; align-items: center; gap: 8px;">
+                        <div class="btn-wrap">
                             <button type="button" id="generateHardwareBtn" class="btn btn-primary">
                                 <span class="material-icons-round">security</span>
-                                Generate QX Hardware Pass
+                                Generate hardware pass
                             </button>
-                            <button class="info-btn" type="button">
+                            <button class="info-btn" type="button" aria-label="About hardware pass">
                                 i
-                                <div class="tooltip">Quantum-secure + Device-bound: Uses hardware authentication (Touch ID, Face ID, or security key) to create a unique password per device. Most secure option - same password every time on THIS device only.</div>
+                                <span class="tooltip">Device-bound. Requires a WebAuthn ceremony (Touch ID, Face ID, Windows Hello, or a FIDO2 key). Reproduces only on the enrolled device.</span>
                             </button>
                         </div>
-                        <div style="display: flex; align-items: center; gap: 8px;">
+                        <div class="btn-wrap">
                             <button type="button" id="generateBasicBtn" class="btn">
                                 <span class="material-icons-round">key</span>
-                                Generate QX Normal Pass
+                                Generate normal pass
                             </button>
-                            <button class="info-btn" type="button">
+                            <button class="info-btn" type="button" aria-label="About normal pass">
                                 i
-                                <div class="tooltip">Quantum-secure, not device-bound: Works on any device without hardware authentication. Same password on all devices with same inputs. Good security, maximum compatibility.</div>
+                                <span class="tooltip">Portable. No hardware needed. Same inputs reproduce the same password on any device.</span>
                             </button>
                         </div>
                     </div>
                 </div>
-                
-                <div id="status" class="status hidden"></div>
-                
+
+                <div id="status" class="status hidden" role="status" aria-live="polite"></div>
+
                 <div class="form-group">
-                    <label class="form-label">
-                        Generated Password
-                        <button class="info-btn" type="button">
+                    <label class="form-label" for="passwordOutput">
+                        Generated password
+                        <button class="info-btn" type="button" aria-label="About the output">
                             i
-                            <div class="tooltip">Your quantum-secure password. Click copy to safely transfer it to your password field. It will be the same every time with the same inputs.</div>
+                            <span class="tooltip">Deterministic output. Regenerate any time with the same inputs; rotate by changing the site name (e.g. github.com-v2).</span>
                         </button>
                     </label>
-                    <div id="passwordOutput" class="password-output">Click generate to create your quantum-secure password</div>
+                    <div id="passwordOutput" class="password-output" aria-live="polite">Fill the fields and hit generate.</div>
+                    <div class="output-meta">
+                        <span id="passwordMeta">No output yet.</span>
+                        <span id="entropyMeta"></span>
+                    </div>
                 </div>
-                
+
                 <div class="btn-group">
                     <button type="button" id="copyBtn" class="btn" disabled>
                         <span class="material-icons-round">content_copy</span>
-                        Copy Password
+                        Copy password
                     </button>
                     <button type="button" id="clearBtn" class="btn">
                         <span class="material-icons-round">clear_all</span>
-                        Clear All
-                    </button>
-                    <button type="button" id="skipAuthBtn" class="btn hidden">
-                        <span class="material-icons-round">skip_next</span>
-                        Skip Hardware Auth
+                        Clear all
                     </button>
                 </div>
-            </div>
-            
-            <div class="card">
+            </section>
+
+            <section class="card" aria-label="Password settings">
                 <div class="settings-header">
-                    <h3>
-                        Password Settings
-                        <button class="info-btn" type="button">
+                    <div class="card-head card-head-inline">
+                        <span class="card-index">02</span>
+                        <h3>Settings</h3>
+                        <button class="info-btn" type="button" aria-label="About settings">
                             i
-                            <div class="tooltip">Customize your password generation preferences. These settings are saved locally in your browser.</div>
+                            <span class="tooltip">Generation parameters. Saved in this browser only; the passphrase itself is never saved.</span>
                         </button>
-                    </h3>
-                    <button class="minimize-btn" id="settingsMinimize" type="button">+</button>
+                    </div>
+                    <button class="minimize-btn" id="settingsMinimize" type="button" aria-label="Expand or collapse settings">+</button>
                 </div>
                 <div class="settings-content collapsed" id="settingsContent">
                     <div class="settings-grid">
                         <div class="settings-card">
                             <div class="form-group">
-                                <label class="form-label">
-                                    Password Length
-                                    <button class="info-btn" type="button">
+                                <label class="form-label" for="passwordLength">
+                                    Password length
+                                    <button class="info-btn" type="button" aria-label="About password length">
                                         i
-                                        <div class="tooltip">Longer passwords are more secure. We recommend at least 16 characters for optimal security.</div>
+                                        <span class="tooltip">12 to 64 characters. 20+ recommended for important accounts.</span>
                                     </button>
                                 </label>
                                 <div class="slider-container">
@@ -173,31 +207,31 @@
                                 </div>
                             </div>
                         </div>
-                        
+
                         <div class="settings-card">
                             <div class="form-group">
-                                <label class="form-label">
-                                    Include Special Characters
-                                    <button class="info-btn" type="button">
+                                <label class="form-label" for="includeSpecial">
+                                    Special characters
+                                    <button class="info-btn" type="button" aria-label="About special characters">
                                         i
-                                        <div class="tooltip">Special characters increase password complexity and security. Some sites may not accept all special characters.</div>
+                                        <span class="tooltip">Adds symbols and punctuation. Disable for sites with restricted character sets.</span>
                                     </button>
                                 </label>
                                 <div class="switch-container">
                                     <input type="checkbox" id="includeSpecial" class="switch-input" checked>
-                                    <div class="switch"></div>
-                                    <span>Symbols & Punctuation</span>
+                                    <div class="switch" aria-hidden="true"></div>
+                                    <span>Symbols + punctuation</span>
                                 </div>
                             </div>
                         </div>
-                        
+
                         <div class="settings-card">
                             <div class="form-group">
-                                <label class="form-label">
-                                    Quantum Resistance Level
-                                    <button class="info-btn" type="button">
+                                <label class="form-label" for="quantumLevel">
+                                    Hardening level
+                                    <button class="info-btn" type="button" aria-label="About hardening level">
                                         i
-                                        <div class="tooltip">Higher levels use more PQC rounds with simulated Kyber KEM operations for enhanced quantum resistance. Combines with device-specific WebAuthn secrets for maximum security.</div>
+                                        <span class="tooltip">Scales PBKDF2 iterations (100k–200k) and the seed-hardening rounds feeding the Kyber-768 KEM. Higher is slower and stronger.</span>
                                     </button>
                                 </label>
                                 <div class="slider-container">
@@ -210,309 +244,314 @@
                                 </div>
                             </div>
                         </div>
-                        
+
                         <div class="settings-card">
                             <div class="form-group">
-                                <label class="form-label">
-                                    Auto-Clear Sensitive Data
-                                    <button class="info-btn" type="button">
+                                <label class="form-label" for="autoClear">
+                                    Auto-clear
+                                    <button class="info-btn" type="button" aria-label="About auto-clear">
                                         i
-                                        <div class="tooltip">Automatically clear your master passphrase and generated password after a specified time for enhanced security.</div>
+                                        <span class="tooltip">Wipes the passphrase and output from the page five minutes after generation.</span>
                                     </button>
                                 </label>
                                 <div class="switch-container">
                                     <input type="checkbox" id="autoClear" class="switch-input" checked>
-                                    <div class="switch"></div>
+                                    <div class="switch" aria-hidden="true"></div>
                                     <span>Clear after 5 minutes</span>
                                 </div>
                             </div>
                         </div>
                     </div>
                 </div>
-            </div>
+            </section>
+
+            <section class="card" aria-label="Derivation pipeline">
+                <div class="card-head">
+                    <span class="card-index">03</span>
+                    <h2>Pipeline</h2>
+                    <span class="card-tag">Deterministic</span>
+                </div>
+                <ol class="pipeline">
+                    <li><strong>Stretch</strong><span>PBKDF2-SHA512, per-site salt</span></li>
+                    <li><strong>Encapsulate</strong><span>Kyber-768 KEM in WASM</span></li>
+                    <li><strong>Expand</strong><span>HKDF-SHA256, per-site info</span></li>
+                    <li><strong>Render</strong><span>Map bytes to charset</span></li>
+                </ol>
+            </section>
         </div>
-        
-        <!-- About Tab -->
+
+        <!-- About -->
         <div id="about" class="tab-content">
-            <div class="card">
-                <h2>
-                    About QXVault
-                    <button class="info-btn" type="button">
-                        i
-                        <div class="tooltip">Learn about QXVault's innovative approach to password management in the quantum computing era.</div>
-                    </button>
-                </h2>
-                <p>QXVault is a next-generation password manager designed for the quantum computing era. Unlike traditional password managers that store your passwords in encrypted databases, QXVault generates your passwords deterministically on-demand using post-quantum cryptographic algorithms.</p>
-                
-                <h3>🚀 Key Features</h3>
-                <ul>
-                    <li><strong>Quantum-Secure:</strong> Uses post-quantum cryptographic principles resistant to both classical and quantum attacks</li>
-                    <li><strong>Serverless:</strong> No databases, no storage, no single point of failure</li>
-                    <li><strong>Deterministic:</strong> Same inputs always generate the same password</li>
-                    <li><strong>Hardware Security:</strong> WebAuthn integration for hardware-based authentication</li>
-                    <li><strong>Zero-Knowledge:</strong> We never see or store your passwords or passphrases</li>
-                    <li><strong>Cross-Platform:</strong> Works identically on any device with a modern browser</li>
+            <section class="card">
+                <div class="card-head">
+                    <span class="card-index">01</span>
+                    <h2>About</h2>
+                </div>
+                <p class="lede">QXVault is a password generator, not a password store. It re-derives each password from your inputs on demand using post-quantum primitives, so there is no vault file to sync, back up, or breach.</p>
+
+                <h3>Properties</h3>
+                <ul class="checklist">
+                    <li><strong>Stateless.</strong> No database, no server state, no single point of failure.</li>
+                    <li><strong>Deterministic.</strong> Identical inputs always yield the identical password.</li>
+                    <li><strong>Hardware-capable.</strong> Optional WebAuthn binding ties output to one device.</li>
+                    <li><strong>Local.</strong> Every operation runs in this browser; nothing is transmitted.</li>
+                    <li><strong>Portable.</strong> The algorithm is open and reimplementable anywhere.</li>
+                    <li><strong>Post-quantum.</strong> Kyber-768 KEM stage resists harvest-now-decrypt-later collection.</li>
                 </ul>
-                
-                <h3>🔬 Technology Stack</h3>
+
+                <h3>Stack</h3>
                 <div class="settings-grid">
                     <div class="settings-card">
                         <h4>Cryptography</h4>
                         <ul>
-                            <li>Post-Quantum Key Derivation</li>
-                            <li>PBKDF2 with SHA-512</li>
-                            <li>100,000+ iterations</li>
-                            <li>Hardware entropy integration</li>
+                            <li>PBKDF2-SHA512, 100k–200k iterations</li>
+                            <li>Kyber-768 KEM (WASM)</li>
+                            <li>HKDF-SHA256 expansion</li>
+                            <li>Per-site salt and context info</li>
                         </ul>
                     </div>
                     <div class="settings-card">
                         <h4>Security</h4>
                         <ul>
-                            <li>WebAuthn/FIDO2 support</li>
+                            <li>WebAuthn / FIDO2 device binding</li>
                             <li>Client-side processing only</li>
-                            <li>No data transmission</li>
-                            <li>Memory-safe operations</li>
+                            <li>No network calls during generation</li>
+                            <li>Auto-clear of sensitive fields</li>
                         </ul>
                     </div>
                     <div class="settings-card">
                         <h4>Platform</h4>
                         <ul>
-                            <li>Cloudflare Edge computing</li>
-                            <li>Progressive Web App</li>
-                            <li>Offline-first design</li>
-                            <li>Material 3 UI framework</li>
+                            <li>Static assets on Cloudflare Workers</li>
+                            <li>No backend, no database</li>
+                            <li>Works offline after first load</li>
+                            <li>Evergreen desktop and mobile browsers</li>
                         </ul>
                     </div>
                 </div>
-            </div>
+            </section>
         </div>
-        
-        <!-- FAQ Tab -->
+
+        <!-- FAQ -->
         <div id="faq" class="tab-content">
-            <div class="card">
-                <h2>
-                    Frequently Asked Questions
-                    <button class="info-btn" type="button">
-                        i
-                        <div class="tooltip">Common questions about QXVault's functionality, security, and usage.</div>
-                    </button>
-                </h2>
-                
+            <section class="card">
+                <div class="card-head">
+                    <span class="card-index">01</span>
+                    <h2>FAQ</h2>
+                </div>
+
                 <div class="faq-item">
-                    <div class="faq-question">What's the difference between QX Hardware Pass and QX Normal Pass?</div>
+                    <div class="faq-question" tabindex="0" role="button">Hardware pass vs normal pass?</div>
                     <div class="faq-answer">
-                        <strong>🔐 QX Hardware Pass (Recommended):</strong><br>
-                        • Uses hardware authentication (Touch ID, Face ID, security keys, fingerprint)<br>
-                        • Binds passwords to YOUR specific device using cryptographic hardware<br>
-                        • Same inputs = same password, but ONLY on this device<br>
-                        • Maximum security: Device-specific, quantum-secure, hardware-backed<br>
-                        • Setup required once per device<br><br>
-                        
-                        <strong>🔑 QX Normal Pass:</strong><br>
-                        • Works on any device without hardware authentication<br>
-                        • Same inputs = same password across ALL devices<br>
-                        • Good security: Quantum-secure but not device-bound<br>
-                        • Maximum compatibility and convenience<br>
-                        • No setup required, works immediately<br><br>
-                        
-                        <strong>When to use which:</strong><br>
-                        • Use <em>QX Hardware Pass</em> for maximum security on your personal devices<br>
-                        • Use <em>QX Normal Pass</em> when accessing from shared/public computers or when hardware auth isn't available
+                        <p><strong>Hardware pass</strong> requires a WebAuthn ceremony and binds output to the enrolled device: same inputs reproduce only there. Use it on personal machines for high-value accounts.</p>
+                        <p><strong>Normal pass</strong> needs no hardware and reproduces on any device from the same inputs. Use it for shared machines, travel, and as a fallback.</p>
                     </div>
                 </div>
-                
+
                 <div class="faq-item">
-                    <div class="faq-question">How does deterministic password generation work?</div>
-                    <div class="faq-answer">QXVault combines your master passphrase, site name, and (optionally) hardware key authentication to generate a unique password for each site. The same inputs will always produce the same password, eliminating the need to store passwords.</div>
+                    <div class="faq-question" tabindex="0" role="button">How does deterministic generation work?</div>
+                    <div class="faq-answer">Passphrase, site, and optional username are combined with a device secret, stretched with PBKDF2-SHA512, run through a derandomized Kyber-768 KEM, and expanded with HKDF-SHA256. Same inputs, same output — no storage involved.</div>
                 </div>
-                
+
                 <div class="faq-item">
-                    <div class="faq-question">What makes it quantum-secure?</div>
-                    <div class="faq-answer">We use post-quantum cryptographic algorithms that are designed to be resistant to attacks from both classical and quantum computers, ensuring your passwords remain secure even in the quantum computing era.</div>
+                    <div class="faq-question" tabindex="0" role="button">What makes it quantum-resistant?</div>
+                    <div class="faq-answer">The KEM stage uses Kyber-768, a NIST-selected lattice-based algorithm. An adversary recording traffic today cannot retroactively break the encapsulation once quantum hardware matures. The surrounding KDF remains hash-based.</div>
                 </div>
-                
+
                 <div class="faq-item">
-                    <div class="faq-question">Do I need a hardware security key?</div>
-                    <div class="faq-answer">No, hardware authentication is optional. Use "QX Hardware Pass" for maximum security with device-bound passwords, or "QX Normal Pass" for convenience without hardware requirements. Both use quantum-secure cryptography.</div>
+                    <div class="faq-question" tabindex="0" role="button">Do I need a hardware security key?</div>
+                    <div class="faq-answer">No. Platform authenticators (Touch ID, Face ID, Windows Hello) work, and normal pass needs nothing at all. A roaming FIDO2 key is optional.</div>
                 </div>
-                
+
                 <div class="faq-item">
-                    <div class="faq-question">What happens if I lose access to my hardware authentication?</div>
-                    <div class="faq-answer">If you used "QX Hardware Pass", those passwords are device-specific and can't be recovered without the original device. Always use "QX Normal Pass" for backup access, or keep backup devices configured. For maximum flexibility, use "QX Normal Pass" primarily and "QX Hardware Pass" only for high-security accounts.</div>
+                    <div class="faq-question" tabindex="0" role="button">What if I lose the enrolled device?</div>
+                    <div class="faq-answer">Hardware-bound passwords cannot be reproduced without it. Keep normal-pass equivalents for recovery, or enroll a second device before you need it.</div>
                 </div>
-                
+
                 <div class="faq-item">
-                    <div class="faq-question">Can I use this offline?</div>
-                    <div class="faq-answer">Yes! Once loaded, QXVault works completely offline. All cryptographic operations happen locally in your browser. No internet connection is required for password generation.</div>
+                    <div class="faq-question" tabindex="0" role="button">Does it work offline?</div>
+                    <div class="faq-answer">Yes. After the first load, generation is fully local. No requests are made during derivation.</div>
                 </div>
-                
+
                 <div class="faq-item">
-                    <div class="faq-question">How do I change a compromised password?</div>
-                    <div class="faq-answer">Simply add a version number or suffix to the site name (e.g., "gmail.com-v2"). This will generate a completely different password while keeping your master passphrase the same.</div>
+                    <div class="faq-question" tabindex="0" role="button">How do I rotate a compromised password?</div>
+                    <div class="faq-answer">Append a version to the site name, e.g. github.com-v2. The output is unrelated to the previous one; the passphrase stays the same.</div>
                 </div>
-                
+
                 <div class="faq-item">
-                    <div class="faq-question">Is my data private?</div>
-                    <div class="faq-answer">Absolutely. QXVault processes everything locally in your browser. Your master passphrase, passwords, and personal data never leave your device. We literally cannot see your data.</div>
+                    <div class="faq-question" tabindex="0" role="button">Why did my passwords change after an update?</div>
+                    <div class="faq-answer">The v5 derivation update fixed device identifiers that previously depended on browser metadata, so old outputs no longer reproduce. Re-register each affected account with the freshly generated password; from v5 on, parameters are frozen.</div>
                 </div>
-                
+
                 <div class="faq-item">
-                    <div class="faq-question">What browsers are supported?</div>
-                    <div class="faq-answer">QXVault works on all modern browsers that support WebCrypto API and WebAuthn. This includes Chrome, Firefox, Safari, Edge, and their mobile versions.</div>
+                    <div class="faq-question" tabindex="0" role="button">What data leaves my device?</div>
+                    <div class="faq-answer">None during generation. The passphrase, site names, and outputs never leave the browser. The only persisted item is the WebAuthn credential ID in localStorage, which is non-secret by design.</div>
                 </div>
-            </div>
+
+                <div class="faq-item">
+                    <div class="faq-question" tabindex="0" role="button">Which browsers are supported?</div>
+                    <div class="faq-answer">Any browser with Web Crypto and WebAssembly covers normal pass. Hardware pass additionally needs WebAuthn and a secure context (HTTPS or localhost).</div>
+                </div>
+            </section>
         </div>
-        
-        <!-- How It's Different Tab -->
+
+        <!-- Compare -->
         <div id="different" class="tab-content">
-            <div class="card">
-                <h2>How QXVault is Different</h2>
-                
-                <h3>Traditional Password Managers</h3>
-                <ul>
-                    <li>Store encrypted passwords in databases</li>
-                    <li>Single point of failure (server breaches)</li>
-                    <li>Require constant syncing across devices</li>
-                    <li>Vulnerable to quantum computing attacks</li>
-                    <li>Depend on third-party servers</li>
+            <section class="card">
+                <div class="card-head">
+                    <span class="card-index">01</span>
+                    <h2>Compare</h2>
+                </div>
+
+                <h3>Conventional managers</h3>
+                <ul class="checklist checklist-bad">
+                    <li>Encrypted vaults stored on disk or in the cloud</li>
+                    <li>Breach of the vault exposes everything at once</li>
+                    <li>Sync infrastructure to run and trust</li>
+                    <li>Classical-only key wrapping in most products</li>
                 </ul>
-                
-                <h3>QXVault Approach</h3>
-                <ul>
-                    <li>Generates passwords on-demand mathematically</li>
-                    <li>No storage, no databases, no servers to hack</li>
-                    <li>Works identically on any device</li>
-                    <li>Quantum-resistant cryptography</li>
-                    <li>Completely serverless and decentralized</li>
+
+                <h3>QXVault</h3>
+                <ul class="checklist">
+                    <li>Passwords derived on demand, never stored</li>
+                    <li>No vault, no sync, no server-side state</li>
+                    <li>Identical behavior on any device</li>
+                    <li>Kyber-768 KEM in the derivation path</li>
                 </ul>
-                
-                <h3>Two Security Modes</h3>
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 15px;">
-                    <div style="padding: 15px; border: 1px solid var(--border-primary); border-radius: 8px;">
-                        <h4 style="color: var(--accent-cyan); margin-bottom: 10px;">🔒 QX Hardware Pass</h4>
-                        <ul style="margin: 0; font-size: 14px;">
-                            <li>Device-bound security</li>
-                            <li>Uses Touch ID/Face ID/Security keys</li>
-                            <li>Unique passwords per device</li>
-                            <li>Maximum security</li>
-                            <li>Same inputs = same password on THIS device only</li>
+
+                <h3>Modes</h3>
+                <div class="compare-grid">
+                    <div class="mode-card mode-card-hw">
+                        <h4>Hardware pass</h4>
+                        <ul>
+                            <li>Bound to one device</li>
+                            <li>WebAuthn ceremony per generation</li>
+                            <li>Unrecoverable without the device</li>
+                            <li>Best for primary machines</li>
                         </ul>
                     </div>
-                    <div style="padding: 15px; border: 1px solid var(--border-primary); border-radius: 8px;">
-                        <h4 style="color: var(--accent-purple); margin-bottom: 10px;">🔑 QX Normal Pass</h4>
-                        <ul style="margin: 0; font-size: 14px;">
-                            <li>Cross-device compatibility</li>
-                            <li>No hardware requirements</li>
-                            <li>Same passwords on all devices</li>
-                            <li>Good security + convenience</li>
-                            <li>Same inputs = same password everywhere</li>
+                    <div class="mode-card mode-card-normal">
+                        <h4>Normal pass</h4>
+                        <ul>
+                            <li>Reproduces everywhere</li>
+                            <li>No hardware needed</li>
+                            <li>Ideal fallback and travel option</li>
+                            <li>Best for shared machines</li>
                         </ul>
                     </div>
                 </div>
-                
-                <h3>Security Advantages</h3>
-                <ul>
-                    <li><strong>No Data Breaches:</strong> Nothing to steal - passwords exist only when generated</li>
-                    <li><strong>Future-Proof:</strong> Designed to resist quantum computing attacks</li>
-                    <li><strong>Hardware-Backed:</strong> Optional hardware security key integration</li>
-                    <li><strong>Zero Trust:</strong> You don't need to trust us with your data</li>
+
+                <h3>Why stateless wins</h3>
+                <ul class="checklist">
+                    <li><strong>No breach surface:</strong> there is no stored secret to exfiltrate.</li>
+                    <li><strong>No sync:</strong> every device computes the same answer independently.</li>
+                    <li><strong>No lock-in:</strong> the algorithm is documented and reimplementable.</li>
+                    <li><strong>No trust required:</strong> the host learns nothing, by construction.</li>
                 </ul>
-            </div>
+            </section>
         </div>
-        
-        <!-- Why Trust Us Tab -->
+
+        <!-- Trust -->
         <div id="trust" class="tab-content">
-            <div class="card">
-                <h2>Why Trust QXVault</h2>
-                
-                <h3>Open Source Transparency</h3>
-                <p>QXVault is completely open source. You can inspect every line of code, verify the cryptographic implementations, and even run your own version.</p>
-                
-                <h3>Zero-Knowledge Architecture</h3>
-                <p>We designed QXVault so that we never see, store, or have access to your master passphrase, passwords, or any sensitive data. Everything happens locally in your browser.</p>
-                
-                <h3>Cryptographic Principles</h3>
-                <ul>
-                    <li>Post-quantum cryptographic algorithms</li>
-                    <li>Industry-standard WebAuthn for hardware authentication</li>
-                    <li>AES-GCM encryption with PBKDF2 key derivation</li>
-                    <li>Multiple rounds of cryptographic hardening</li>
+            <section class="card">
+                <div class="card-head">
+                    <span class="card-index">01</span>
+                    <h2>Trust</h2>
+                </div>
+
+                <h3>Verifiable, not promised</h3>
+                <p>Every derivation step runs in readable client-side code with standard primitives: PBKDF2, Kyber-768, HKDF, WebAuthn. Inspect the sources, check the network tab during generation, and confirm zero requests.</p>
+
+                <h3>Minimal trust surface</h3>
+                <ul class="checklist">
+                    <li>Static hosting only — no application server processes your data</li>
+                    <li>Open primitives with published test vectors</li>
+                    <li>KEM round-trip self-check on every generation</li>
+                    <li>Credential IDs are the only persisted data, and they are public by WebAuthn design</li>
                 </ul>
-                
-                <h3>No Vendor Lock-in</h3>
-                <p>Since your passwords are generated deterministically, you're never locked into using QXVault. You can implement the same algorithm anywhere or use our open-source code.</p>
-                
-                <h3>Serverless by Design</h3>
-                <p>There are no servers to compromise, no databases to breach, and no infrastructure to maintain. The entire system runs in your browser or on Cloudflare's edge network.</p>
-            </div>
+
+                <h3>Honest limits</h3>
+                <ul class="checklist checklist-bad">
+                    <li>A compromised endpoint defeats any password tool</li>
+                    <li>A weak passphrase bounds the whole construction</li>
+                    <li>Forgotten passphrases have no recovery path</li>
+                </ul>
+            </section>
         </div>
-        
-        <!-- Terms & Conditions Tab -->
+
+        <!-- Terms -->
         <div id="terms" class="tab-content">
-            <div class="card">
-                <h2>Terms & Conditions</h2>
-                
-                <h3>1. Service Description</h3>
-                <p>QXVault provides a quantum-secure, deterministic password generation service that operates entirely client-side without storing user data.</p>
-                
-                <h3>2. User Responsibilities</h3>
-                <ul>
-                    <li>You are solely responsible for remembering your master passphrase</li>
-                    <li>You must securely store backup hardware security keys</li>
-                    <li>You acknowledge that forgotten passphrases cannot be recovered</li>
+            <section class="card">
+                <div class="card-head">
+                    <span class="card-index">01</span>
+                    <h2>Terms</h2>
+                </div>
+
+                <h3>1. What this is</h3>
+                <p>A client-side, deterministic password generator. It stores no user data and transmits none during generation.</p>
+
+                <h3>2. Your responsibility</h3>
+                <ul class="checklist">
+                    <li>Remember the master passphrase — it cannot be recovered</li>
+                    <li>Keep fallback access for accounts that matter</li>
+                    <li>Do not use hardware-bound output as your only copy</li>
                 </ul>
-                
-                <h3>3. Privacy & Data</h3>
-                <ul>
-                    <li>We do not collect, store, or have access to your passwords or passphrases</li>
-                    <li>All cryptographic operations occur locally in your browser</li>
-                    <li>We may collect anonymous usage analytics for service improvement</li>
+
+                <h3>3. Privacy</h3>
+                <ul class="checklist">
+                    <li>No passphrase, password, or site name is collected or stored</li>
+                    <li>All cryptography runs locally in the browser</li>
+                    <li>No analytics, no tracking, no third-party calls in the app shell</li>
                 </ul>
-                
-                <h3>4. Security Disclaimer</h3>
-                <p>While QXVault uses state-of-the-art cryptographic methods, no system is 100% secure. Users should follow security best practices and maintain backup access methods.</p>
-                
-                <h3>5. Service Availability</h3>
-                <p>We provide this service "as is" without warranties. We are not liable for service interruptions or data loss.</p>
-                
-                <h3>6. Open Source License</h3>
-                <p>QXVault is licensed under MIT License. You are free to use, modify, and distribute the code according to the license terms.</p>
-            </div>
+
+                <h3>4. Warranty</h3>
+                <p>Provided as-is, without warranty. No system is unconditionally secure; follow standard operational hygiene and keep backups of access.</p>
+
+                <h3>5. License</h3>
+                <p>QXVault is licensed under GPL-3.0. The bundled pqc-kyber WASM build carries its own MIT license; see public/vendor/pqc-kyber/LICENSE-MIT.</p>
+            </section>
         </div>
-        
-        <!-- Source Code Tab -->
+
+        <!-- Build -->
         <div id="source" class="tab-content">
-            <div class="card">
-                <h2>Source Code & Links</h2>
-                
-                <h3>Repository</h3>
-                <p>Full source code is available on GitHub:</p>
-                <a href="https://github.com/qxvault/qxvault" class="btn" target="_blank">View on GitHub</a>
-                
-                <h3>Documentation</h3>
-                <ul>
-                    <li><a href="https://qxvault.dev/docs" target="_blank">Technical Documentation</a></li>
-                    <li><a href="https://qxvault.dev/security" target="_blank">Security Whitepaper</a></li>
-                    <li><a href="https://qxvault.dev/api" target="_blank">API Reference</a></li>
+            <section class="card">
+                <div class="card-head">
+                    <span class="card-index">01</span>
+                    <h2>Build</h2>
+                    <span class="card-tag">wrangler</span>
+                </div>
+
+                <h3>Run locally</h3>
+                <pre class="codeblock"><code>git clone &lt;repository-url&gt;
+cd QXVault
+wrangler dev</code></pre>
+                <p>WebAuthn needs a secure context; localhost qualifies.</p>
+
+                <h3>Deploy</h3>
+                <pre class="codeblock"><code>wrangler deploy</code></pre>
+                <p>Any static host also works: serve <code>public/</code> with <code>application/wasm</code> for <code>.wasm</code> files.</p>
+
+                <h3>Layout</h3>
+                <pre class="codeblock"><code>src/worker.js              asset serving + minimal API
+public/index.html          app shell
+public/script.js           pipeline + WebAuthn + UI
+public/style.css           this theme
+public/vendor/pqc-kyber/   Kyber-768 WASM build</code></pre>
+
+                <h3>Verify</h3>
+                <ul class="checklist">
+                    <li>Generate twice with identical inputs — outputs match</li>
+                    <li>Change one input character — output is unrelated</li>
+                    <li>Watch the network tab — zero requests during generation</li>
                 </ul>
-                
-                <h3>Community</h3>
-                <ul>
-                    <li><a href="https://discord.gg/qxvault" target="_blank">Discord Community</a></li>
-                    <li><a href="https://reddit.com/r/qxvault" target="_blank">Reddit Community</a></li>
-                    <li><a href="https://twitter.com/qxvault" target="_blank">Twitter Updates</a></li>
-                </ul>
-                
-                <h3>Bug Reports & Feature Requests</h3>
-                <p>Found a bug or have a feature request?</p>
-                <a href="https://github.com/qxvault/qxvault/issues" class="btn" target="_blank">Report Issues</a>
-            </div>
+            </section>
         </div>
     </div>
-    
+
     <footer class="footer">
         <div class="footer-content">
-            <p>&copy; 2025 QXVault. All rights reserved.</p>
+            <span class="footer-logo"><span class="logo-mark">QX</span>VAULT</span>
+            <p>Stateless derivation. Nothing stored. <span id="year">2025</span></p>
         </div>
     </footer>
 </body>

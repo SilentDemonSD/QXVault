@@ -7,7 +7,6 @@
 			"command": "wrangler",
 			"args": [
 				"dev",
-				"worker.js",
 				"--port",
 				"8787"
 			],

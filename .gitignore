@@ -1,0 +1,25 @@
+# Wrangler local state (dev server, ports, sqlite)
+.wrangler/
+
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+build/
+out/
+
+# Environment files and local secrets (never commit these)
+.env
+.env.*
+!.env.example
+.dev.vars
+
+# OS artifacts
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Editor config - keep shared tasks, ignore personal settings
+.vscode/*
+!.vscode/tasks.json

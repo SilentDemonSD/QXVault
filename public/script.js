@@ -1,5 +1,62 @@
 let isWebAuthnConfigured = false;
 let webAuthnCredential = null;
+let generationBusy = false;
+
+const QX_DEBUG = typeof location !== 'undefined' && location.hash === '#qx-debug';
+function qxlog(...args) { if (QX_DEBUG) qxlog(...args); }
+
+function setBusy(busy) {
+    generationBusy = busy;
+    for (const id of ['generateHardwareBtn', 'generateBasicBtn']) {
+        const el = document.getElementById(id);
+        if (el) el.disabled = busy;
+    }
+}
+
+const UTF8 = new TextEncoder();
+
+function concatBytes(...parts) {
+    let total = 0;
+    for (const p of parts) total += p.length;
+    const out = new Uint8Array(total);
+    let offset = 0;
+    for (const p of parts) { out.set(p, offset); offset += p.length; }
+    return out;
+}
+
+let autoClearTimer = 0;
+
+function armAutoClear() {
+    if (autoClearTimer) { clearTimeout(autoClearTimer); autoClearTimer = 0; }
+    const toggle = document.getElementById('autoClear');
+    if (!toggle || !toggle.checked) return;
+    autoClearTimer = setTimeout(() => {
+        autoClearTimer = 0;
+        document.getElementById('masterPassphrase').value = '';
+        document.getElementById('passwordOutput').textContent = 'Fill the fields and hit generate.';
+        document.getElementById('copyBtn').disabled = true;
+        showStatus('Sensitive data automatically cleared for security', 'info');
+    }, 300000); // 5 minutes
+}
+
+async function copyText(text) {
+    try {
+        await navigator.clipboard.writeText(text);
+        return true;
+    } catch {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.setAttribute('readonly', '');
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        let ok = false;
+        try { ok = document.execCommand('copy'); } catch { ok = false; }
+        ta.remove();
+        return ok;
+    }
+}
 
 function base64UrlEncode(buffer) {
     const bytes = new Uint8Array(buffer);
@@ -31,7 +88,7 @@ function loadWebAuthnCredential() {
             let rawIdBuffer;
             if (parsed.rawIdBase64Url) {
                 rawIdBuffer = base64UrlDecode(parsed.rawIdBase64Url);
-                console.log('Loaded credential using base64url format');
+                qxlog('Loaded credential using base64url format');
             } else {
                 throw new Error('Invalid credential format');
             }
@@ -45,8 +102,8 @@ function loadWebAuthnCredential() {
                 credentialIdBytes: rawIdArray // Keep as Uint8Array for device secret derivation
             };
             isWebAuthnConfigured = true;
-            console.log('WebAuthn credential loaded from storage. Credential ID length:', rawIdArray.length);
-            console.log('Credential ID (first 16 hex):', Array.from(rawIdArray.slice(0, 16)).map(b => b.toString(16).padStart(2, '0')).join(''));
+            qxlog('WebAuthn credential loaded from storage. Credential ID length:', rawIdArray.length);
+            qxlog('Credential ID (first 16 hex):', Array.from(rawIdArray.slice(0, 16)).map(b => b.toString(16).padStart(2, '0')).join(''));
         } catch (error) {
             console.error('Failed to load WebAuthn credential:', error);
             localStorage.removeItem('qxvault-webauthn-credential');
@@ -64,22 +121,21 @@ function saveWebAuthnCredential() {
             isMobile: webAuthnCredential.isMobile
         };
         localStorage.setItem('qxvault-webauthn-credential', JSON.stringify(toStore));
-        console.log('WebAuthn credential saved to storage with base64url encoding');
-        console.log('Credential ID (base64url):', toStore.rawIdBase64Url.substring(0, 32) + '...');
+        qxlog('WebAuthn credential saved to storage with base64url encoding');
+        qxlog('Credential ID (base64url):', toStore.rawIdBase64Url.substring(0, 32) + '...');
     }
 }
 
 // Update hardware button status based on auth state
 function updateHardwareButtonStatus() {
     const hardwareBtn = document.getElementById('generateHardwareBtn');
+    if (!hardwareBtn) return;
     if (isWebAuthnConfigured) {
-        hardwareBtn.innerHTML = '<span class="material-icons-round">verified</span>Generate QX Hardware Pass';
-        hardwareBtn.style.borderColor = 'var(--accent-cyan)';
-        hardwareBtn.style.background = 'rgba(0, 255, 255, 0.1)';
+        hardwareBtn.innerHTML = '<span class="material-icons-round">verified</span>Generate hardware pass';
+        hardwareBtn.classList.add('is-armed');
     } else {
-        hardwareBtn.innerHTML = '<span class="material-icons-round">security</span>Generate QX Hardware Pass';
-        hardwareBtn.style.borderColor = '';
-        hardwareBtn.style.background = '';
+        hardwareBtn.innerHTML = '<span class="material-icons-round">security</span>Generate hardware pass';
+        hardwareBtn.classList.remove('is-armed');
     }
 }
 
@@ -125,36 +181,6 @@ function togglePasswordVisibility() {
 // Make functions globally available for onclick handlers
 window.toggleTheme = toggleTheme;
 window.togglePasswordVisibility = togglePasswordVisibility;
-
-// Validate WebAuthn support and provide detailed feedback
-function validateWebAuthnSupport() {
-    const issues = [];
-
-    // Check basic WebAuthn support
-    if (!window.PublicKeyCredential) {
-        issues.push('WebAuthn not supported in this browser');
-    }
-
-    // Check navigator.credentials
-    if (!navigator.credentials) {
-        issues.push('Credentials API not available');
-    }
-
-    // Check for secure context
-    if (!window.isSecureContext) {
-        issues.push('WebAuthn requires HTTPS or localhost');
-    }
-
-    // Check protocol
-    if (location.protocol === 'file:') {
-        issues.push('WebAuthn not supported with file:// protocol');
-    }
-
-    return {
-        isSupported: issues.length === 0,
-        issues: issues
-    };
-}
 
 // WebAuthn validation and troubleshooting
 function validateWebAuthnEnvironment() {
@@ -205,12 +231,13 @@ function validateWebAuthnEnvironment() {
 }
 
 async function generateQuantumSecurePassword(passphrase, site, email, deviceSecret, length, quantumLevel) {
-    const encoder = new TextEncoder();
+    const encoder = UTF8;
 
-    const masterInput = passphrase + (email || '') + site;
-    const finalSeed = encoder.encode(masterInput + deviceSecret + 'QXVault-PQC-2025');
+    const emailNorm = (email || '').trim().toLowerCase();
+    const masterInput = passphrase + emailNorm + site;
+    const finalSeed = encoder.encode(masterInput + deviceSecret + 'QXVault-PQC-v5');
 
-    let keyMaterial = await crypto.subtle.importKey(
+    const keyMaterial = await crypto.subtle.importKey(
         'raw',
         finalSeed,
         { name: 'PBKDF2' },
@@ -219,7 +246,7 @@ async function generateQuantumSecurePassword(passphrase, site, email, deviceSecr
     );
 
     const iterations = 75000 + (quantumLevel * 25000); // 100k to 200k iterations
-    const salt = encoder.encode('QXVault-PostQuantum-Salt-v2-' + site);
+    const salt = encoder.encode('QXVault-PostQuantum-Salt-v5-' + site);
 
     const derivedBits = await crypto.subtle.deriveBits(
         {
@@ -233,46 +260,99 @@ async function generateQuantumSecurePassword(passphrase, site, email, deviceSecr
     );
 
     const pqcSeed = new Uint8Array(derivedBits, 0, 64); // First 64 bytes
-    const sharedSecret = await simulateKyberKEM(pqcSeed, quantumLevel);
-
-    const passwordBytes = await derivePasswordFromSecret(sharedSecret, length, site);
+    const sharedSecret = await runKyberKEM(pqcSeed, quantumLevel);
 
     const includeSpecial = document.getElementById('includeSpecial').checked;
     const chars = includeSpecial
         ? 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()_+-=[]{}|;:,.<>?'
         : 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
 
-    let password = '';
-    for (let i = 0; i < length; i++) {
-        const index = passwordBytes[i % passwordBytes.length] % chars.length;
-        password += chars[index];
-    }
-
-    return password;
+    return renderPassword(sharedSecret, length, site, chars);
 }
 
-// Simulate Post-Quantum Kyber KEM operations
-async function simulateKyberKEM(seed, quantumLevel) {
-    const encoder = new TextEncoder();
+// Real Post-Quantum Kyber-768 KEM (WASM), derandomized from the PBKDF2-derived seed
+let kyberModulePromise = null;
 
-    // Simulate Kyber key generation with multiple rounds
+function loadKyberModule() {
+    if (!kyberModulePromise) {
+        kyberModulePromise = import('/vendor/pqc-kyber/kyber.js').then(async (mod) => {
+            await mod.initKyber();
+            return mod;
+        });
+        kyberModulePromise.catch(() => { kyberModulePromise = null; });
+    }
+    return kyberModulePromise;
+}
+
+async function buildDeterministicPool(seed, quantumLevel, poolSize) {
+    const encoder = UTF8;
+
     let currentSeed = seed;
     for (let round = 0; round < quantumLevel; round++) {
-        const roundData = new Uint8Array([...currentSeed, ...encoder.encode('round-' + round)]);
+        const roundData = concatBytes(currentSeed, encoder.encode('round-' + round));
         currentSeed = new Uint8Array(await crypto.subtle.digest('SHA-256', roundData));
     }
 
-    // Simulate shared secret derivation
-    const sharedSecretInput = new Uint8Array([...currentSeed, ...encoder.encode('kyber-shared-secret')]);
-    return new Uint8Array(await crypto.subtle.digest('SHA-512', sharedSecretInput));
+    const pool = new Uint8Array(poolSize);
+    let offset = 0;
+    let counter = 0;
+    while (offset < poolSize) {
+        const blockInput = concatBytes(currentSeed, encoder.encode('kyber-drbg-' + counter));
+        const block = new Uint8Array(await crypto.subtle.digest('SHA-512', blockInput));
+        pool.set(block.subarray(0, Math.min(block.length, poolSize - offset)), offset);
+        offset += block.length;
+        counter++;
+    }
+    return pool;
 }
 
-// Derive final password bytes using HKDF-like approach
-async function derivePasswordFromSecret(sharedSecret, length, site) {
-    const encoder = new TextEncoder();
-    const info = encoder.encode('QXVault-Password-' + site);
+let kemQueue = Promise.resolve();
 
-    // Import shared secret as key material
+function runKyberKEM(seed, quantumLevel) {
+    const result = kemQueue.then(() => executeKyberKEM(seed, quantumLevel));
+    kemQueue = result.catch(() => {});
+    return result;
+}
+
+async function executeKyberKEM(seed, quantumLevel) {
+    const kyber = await loadKyberModule();
+    const pool = await buildDeterministicPool(seed, quantumLevel, 1024);
+
+    let poolOffset = 0;
+    kyber.setDeterministicRng((target) => {
+        const view = target instanceof Uint8Array
+            ? target
+            : new Uint8Array(target.buffer, target.byteOffset, target.byteLength);
+        if (poolOffset + view.length > pool.length) {
+            throw new Error('Deterministic RNG pool exhausted');
+        }
+        view.set(pool.subarray(poolOffset, poolOffset + view.length));
+        poolOffset += view.length;
+    });
+
+    try {
+        const keys = kyber.keypair();
+        const kex = kyber.encapsulate(keys.pubkey);
+        const decapsulated = kyber.decapsulate(kex.ciphertext, keys.secret);
+
+        const encapSecret = kex.sharedSecret;
+        if (decapsulated.length !== encapSecret.length ||
+            !decapsulated.every((byte, i) => byte === encapSecret[i])) {
+            throw new Error('Kyber KEM round-trip verification failed');
+        }
+
+        const encoder = UTF8;
+        const finalInput = concatBytes(decapsulated, encoder.encode('kyber-shared-secret'));
+        return new Uint8Array(await crypto.subtle.digest('SHA-512', finalInput));
+    } finally {
+        kyber.setDeterministicRng(null);
+    }
+}
+
+// Render a password with rejection sampling (no modulo bias) over HKDF output.
+// Bytes stream from 64-byte HKDF blocks keyed by a per-block counter so any
+// requested length is satisfiable deterministically.
+async function renderPassword(sharedSecret, length, site, chars) {
     const keyMaterial = await crypto.subtle.importKey(
         'raw',
         sharedSecret,
@@ -281,70 +361,71 @@ async function derivePasswordFromSecret(sharedSecret, length, site) {
         ['deriveBits']
     );
 
-    // Derive password-specific bits
-    const derivedBits = await crypto.subtle.deriveBits(
-        {
-            name: 'HKDF',
-            hash: 'SHA-256',
-            salt: encoder.encode('password-salt'),
-            info: info
-        },
-        keyMaterial,
-        length * 8 // bits needed
-    );
-
-    return new Uint8Array(derivedBits);
+    const charsetSize = chars.length;
+    const limit = 256 - (256 % charsetSize);
+    let block = new Uint8Array(0);
+    let pos = 0;
+    let counter = 0;
+    let password = '';
+    while (password.length < length) {
+        if (pos >= block.length) {
+            const derivedBits = await crypto.subtle.deriveBits(
+                {
+                    name: 'HKDF',
+                    hash: 'SHA-256',
+                    salt: UTF8.encode('password-salt'),
+                    info: UTF8.encode('QXVault-Password-v5-' + site + '#' + counter)
+                },
+                keyMaterial,
+                512 // 64 bytes per block
+            );
+            block = new Uint8Array(derivedBits);
+            pos = 0;
+            counter++;
+        }
+        const byte = block[pos++];
+        if (byte < limit) {
+            password += chars[byte % charsetSize];
+        }
+    }
+    return password;
 }
 
-// Enhanced device secret derivation from WebAuthn (deterministic)
+// Device secret bound to the enrolled WebAuthn credential. Derived from the
+// credential ID alone: browser metadata (user agent, screen, concurrency) is
+// deliberately excluded so browser updates cannot change existing passwords.
 async function deriveDeviceSecret(credentialIdBytes) {
-    const encoder = new TextEncoder();
+    const combinedData = concatBytes(
+        credentialIdBytes,
+        UTF8.encode('qxvault-device-binding-v5')
+    );
 
-    // Create a deterministic device fingerprint
-    const deviceFingerprint = navigator.userAgent +
-        (navigator.hardwareConcurrency || '4') +
-        (screen.width + 'x' + screen.height) +
-        navigator.language;
-
-
-    console.log('Deriving device secret...');
-    console.log('Credential ID length:', credentialIdBytes.length);
-    console.log('Credential ID (hex):', Array.from(credentialIdBytes).map(b => b.toString(16).padStart(2, '0')).join('').substring(0, 32) + '...');
-    console.log('Device fingerprint:', deviceFingerprint.substring(0, 50) + '...');
-
-    // Combine ONLY credential ID and device fingerprint for deterministic result
-    // NOTE: We don't use the signature because it's different each time
-    const combinedData = new Uint8Array([
-        ...credentialIdBytes,
-        ...encoder.encode(deviceFingerprint),
-        ...encoder.encode('qxvault-device-binding-v4-deterministic')
-    ]);
-
-    // Hash to create deterministic device secret
     const deviceHash = await crypto.subtle.digest('SHA-256', combinedData);
-    const deviceSecret = Array.from(new Uint8Array(deviceHash)).map(b => b.toString(16)).join('');
-
-    console.log('Device secret (first 16 chars):', deviceSecret.substring(0, 16) + '...');
-    return deviceSecret;
+    return Array.from(new Uint8Array(deviceHash), (b) => b.toString(16).padStart(2, '0')).join('');
 }
 
 // Status display
+    let statusTimer = 0;
+    let statusSeq = 0;
     function showStatus(message, type) {
         const status = document.getElementById('status');
+        if (!status) return;
+        const seq = ++statusSeq;
         status.textContent = message;
         status.className = 'status ' + type;
         status.classList.remove('hidden');
 
+        if (statusTimer) { clearTimeout(statusTimer); statusTimer = 0; }
         if (type === 'success' || type === 'error') {
-            setTimeout(() => {
-                status.classList.add('hidden');
+            statusTimer = setTimeout(() => {
+                if (seq === statusSeq) status.classList.add('hidden');
             }, 5000);
         }
     }
 
 // Load saved theme
 document.addEventListener('DOMContentLoaded', function () {
-    console.log('🚀 QXVault initializing...');
+    qxlog('🚀 QXVault initializing...');
 
     try {
         // Load saved theme
@@ -455,73 +536,72 @@ function initializeComponents() {
                 throw new Error('WebAuthn is not supported on this device/browser');
             }
 
-            // Determine the RP ID based on the current context
-            let rpId;
-            if (location.protocol === 'file:') {
-                // For file:// protocol, we can't use WebAuthn with RP ID
-                rpId = undefined; // This will use the origin
-            } else if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
-                rpId = 'localhost';
-            } else {
-                rpId = location.hostname;
-            }
+            // No explicit RP ID on purpose: it defaults to the document's effective
+            // domain, which stays valid on localhost, 127.0.0.1, LAN addresses,
+            // and production hosts. A hardcoded ID that mismatches the origin
+            // (e.g. rpId 'localhost' while served from 127.0.0.1) throws
+            // SecurityError and fails setup.
+            const rpId = null;
 
             // Check if we're on mobile and adjust settings
             const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-            const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
 
             showStatus('Setting up hardware authentication...', 'info');
 
-            const userId = crypto.getRandomValues(new Uint8Array(32));
-            const challenge = crypto.getRandomValues(new Uint8Array(32));
+            function buildCreateOptions(relaxed) {
+                return {
+                    publicKey: {
+                        challenge: crypto.getRandomValues(new Uint8Array(32)),
+                        rp: {
+                            name: "QXVault"
+                        },
+                        user: {
+                            id: crypto.getRandomValues(new Uint8Array(32)),
+                            name: "qxvault-user",
+                            displayName: "QXVault User",
+                        },
+                        pubKeyCredParams: [
+                            { alg: -7, type: "public-key" },   // ES256 (preferred)
+                            { alg: -257, type: "public-key" }, // RS256 fallback
+                            { alg: -37, type: "public-key" }   // PS256 additional fallback
+                        ],
+                        authenticatorSelection: relaxed
+                            ? {
+                                userVerification: "preferred",
+                                requireResidentKey: false,
+                                residentKey: "discouraged"
+                            }
+                            : {
+                                // For mobile, prefer platform authenticators (Touch ID/Face ID)
+                                authenticatorAttachment: isMobile ? "platform" : undefined,
+                                userVerification: "preferred", // Always prefer user verification
+                                requireResidentKey: true, // Enable discoverable credentials
+                                residentKey: "preferred" // Prefer resident keys for better compatibility
+                            },
+                        timeout: 120000,
+                        attestation: "none",
+                        extensions: {}
+                    }
+                };
+            }
 
-            // Mobile-specific configuration
-            const createOptions = {
-                publicKey: {
-                    challenge: challenge,
-                    rp: {
-                        name: "QXVault",
-                        ...(rpId && !isMobile && { id: rpId }) // Skip RP ID on mobile for better compatibility
-                    },
-                    user: {
-                        id: userId,
-                        name: "qxvault-user",
-                        displayName: "QXVault User",
-                    },
-                    pubKeyCredParams: [
-                        { alg: -7, type: "public-key" },   // ES256 (preferred)
-                        { alg: -257, type: "public-key" }, // RS256 fallback
-                        { alg: -37, type: "public-key" }   // PS256 additional fallback
-                    ],
-                    authenticatorSelection: {
-                        // For mobile, prefer platform authenticators (Touch ID/Face ID)
-                        authenticatorAttachment: isMobile ? "platform" : undefined,
-                        userVerification: "preferred", // Always prefer user verification
-                        requireResidentKey: true, // Enable discoverable credentials
-                        residentKey: "preferred" // Prefer resident keys for better compatibility
-                    },
-                    timeout: isMobile ? 120000 : 60000, // Longer timeout for mobile
-                    attestation: "none",
-                    extensions: {}
-                }
-            };
+            let createOptions = buildCreateOptions(false);
 
             let credential;
             try {
-                console.log('Creating WebAuthn credential...');
+                qxlog('Creating WebAuthn credential...');
                 credential = await navigator.credentials.create(createOptions);
-            } catch (mobileError) {
-                console.warn('Primary credential creation failed:', mobileError.message);
-                // If platform authenticator fails on mobile, try cross-platform
-                if (isMobile && (mobileError.name === 'NotSupportedError' || mobileError.name === 'InvalidStateError')) {
+            } catch (firstError) {
+                console.warn('Primary credential creation failed:', firstError.name, firstError.message);
+                // Retry once with minimal constraints so platform, roaming, and
+                // hybrid authenticators can all answer, on any platform.
+                if (firstError.name === 'NotSupportedError' || firstError.name === 'ConstraintError') {
                     showStatus('Trying alternative authentication method...', 'info');
-                    createOptions.publicKey.authenticatorSelection.authenticatorAttachment = "cross-platform";
-                    createOptions.publicKey.authenticatorSelection.residentKey = "discouraged";
-                    createOptions.publicKey.authenticatorSelection.requireResidentKey = false;
-                    console.log('Retrying with cross-platform authenticator...');
+                    createOptions = buildCreateOptions(true);
+                    qxlog('Retrying with relaxed authenticator selection...');
                     credential = await navigator.credentials.create(createOptions);
                 } else {
-                    throw mobileError;
+                    throw firstError;
                 }
             }
 
@@ -529,14 +609,14 @@ function initializeComponents() {
                 throw new Error('Failed to create credential - no valid credential returned');
             }
 
-            console.log('WebAuthn credential created successfully');
-            console.log('Credential ID length:', new Uint8Array(credential.rawId).length);
+            qxlog('WebAuthn credential created successfully');
+            qxlog('Credential ID length:', new Uint8Array(credential.rawId).length);
 
             // Store credential info for later use
             webAuthnCredential = {
                 id: credential.id,
                 rawId: credential.rawId,
-                rpId: isMobile ? null : rpId, // Don't store RP ID for mobile
+                rpId: rpId, // null: RP ID always defaults to the current domain
                 isMobile: isMobile, // Store mobile flag for later use
                 // Store the credential properly encoded for authentication
                 credentialIdBytes: new Uint8Array(credential.rawId)
@@ -552,13 +632,11 @@ function initializeComponents() {
             // Update button appearance
             updateHardwareButtonStatus();
 
-            showStatus('Hardware authentication configured successfully! You can now use "Generate QX Hardware Pass".', 'success');
+            showStatus('Hardware authentication configured successfully! You can now use "Generate hardware pass".', 'success');
 
         } catch (error) {
             console.error('WebAuthn setup failed:', error);
             const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-            const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-            const isAndroid = /Android/i.test(navigator.userAgent);
 
             let errorMessage = 'Hardware authentication failed. You can still generate passwords without it.';
 
@@ -575,18 +653,18 @@ function initializeComponents() {
                     errorMessage = 'Hardware authentication was cancelled or not allowed.';
                 }
             } else if (error.name === 'SecurityError') {
-                errorMessage = 'Security error: WebAuthn requires HTTPS or localhost. Try opening via http://localhost or https://.';
+                errorMessage = 'Security error: the browser rejected the ceremony. Open the page over HTTPS or via localhost / 127.0.0.1 on this machine, keep the tab focused, and retry.';
             } else if (error.name === 'InvalidStateError') {
                 errorMessage = 'A credential for this device already exists. Please clear all data first.';
             } else if (error.name === 'ConstraintError') {
                 if (isMobile) {
                     errorMessage = 'Device does not meet authentication requirements. You can still use QXVault without hardware authentication.';
                 } else {
-                    errorMessage = 'Hardware security requirements not met.';
+                    errorMessage = 'No suitable authenticator found. Enable your platform authenticator (Windows Hello, Touch ID) or plug in a security key, then retry.';
                 }
             }
 
-            showStatus(errorMessage, 'error');
+            throw new Error(errorMessage);
         }
     }
 
@@ -599,12 +677,17 @@ function initializeComponents() {
             const isMobile = webAuthnCredential.isMobile || /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
             const challenge = crypto.getRandomValues(new Uint8Array(32));
 
+            // Only replay a stored RP ID when it exactly matches the current
+            // host. Stale values (e.g. saved under a different hostname) would
+            // throw SecurityError; omitting it defaults to the current domain.
+            const storedRpId = webAuthnCredential.rpId;
+            const safeRpId = (storedRpId && storedRpId === location.hostname) ? storedRpId : undefined;
+
             // Try multiple approaches to handle different WebAuthn scenarios
             const getOptions = {
                 publicKey: {
                     challenge: challenge,
-                    // Only use RP ID if not mobile and RP ID exists
-                    ...(webAuthnCredential.rpId && !isMobile && { rpId: webAuthnCredential.rpId }),
+                    ...(safeRpId ? { rpId: safeRpId } : {}),
                     // First try with specific credential
                     allowCredentials: [{
                         id: webAuthnCredential.rawId,
@@ -612,12 +695,12 @@ function initializeComponents() {
                         transports: isMobile ? ['internal'] : ['usb', 'nfc', 'ble', 'internal', 'hybrid']
                     }],
                     userVerification: "preferred", // Changed from discouraged to preferred
-                    timeout: isMobile ? 60000 : 30000
+                    timeout: 60000
                 }
             };
 
-            console.log('Attempting WebAuthn authentication with specific credential...');
-            console.log('Credential ID length:', new Uint8Array(webAuthnCredential.rawId).length);
+            qxlog('Attempting WebAuthn authentication with specific credential...');
+            qxlog('Credential ID length:', new Uint8Array(webAuthnCredential.rawId).length);
 
             let assertion;
             try {
@@ -629,19 +712,20 @@ function initializeComponents() {
                 const fallbackOptions = {
                     publicKey: {
                         challenge: challenge,
-                        ...(webAuthnCredential.rpId && !isMobile && { rpId: webAuthnCredential.rpId }),
+                        ...(safeRpId ? { rpId: safeRpId } : {}),
                         allowCredentials: [], // Empty array to accept any credential
                         userVerification: "preferred",
-                        timeout: isMobile ? 60000 : 30000
+                        timeout: 60000
                     }
                 };
 
-                console.log('Trying with empty allowCredentials...');
+                qxlog('Trying with empty allowCredentials...');
                 assertion = await navigator.credentials.get(fallbackOptions);
 
                 // If this succeeds, update our stored credential with the actual one used
                 if (assertion && assertion.rawId) {
-                    console.log('Fallback succeeded, updating stored credential...');
+                    qxlog('Fallback succeeded, updating stored credential...');
+                    webAuthnCredential.id = assertion.id || webAuthnCredential.id;
                     webAuthnCredential.rawId = assertion.rawId;
                     webAuthnCredential.credentialIdBytes = new Uint8Array(assertion.rawId);
                     saveWebAuthnCredential();
@@ -652,7 +736,7 @@ function initializeComponents() {
                 throw new Error('Authentication failed - no valid response received');
             }
 
-            console.log('WebAuthn authentication successful');
+            qxlog('WebAuthn authentication successful');
             return assertion.response.signature;
 
         } catch (error) {
@@ -686,8 +770,8 @@ function initializeComponents() {
     function verifyCredentialConsistency() {
         if (webAuthnCredential && webAuthnCredential.credentialIdBytes) {
             const credentialIdHex = Array.from(webAuthnCredential.credentialIdBytes).map(b => b.toString(16).padStart(2, '0')).join('');
-            console.log('Current credential ID (full):', credentialIdHex);
-            console.log('Credential ID length:', webAuthnCredential.credentialIdBytes.length);
+            qxlog('Current credential ID (full):', credentialIdHex);
+            qxlog('Credential ID length:', webAuthnCredential.credentialIdBytes.length);
 
             // Store a hash of the credential ID to verify consistency across sessions
             const credentialHash = Array.from(webAuthnCredential.credentialIdBytes).reduce((hash, byte) => {
@@ -696,8 +780,8 @@ function initializeComponents() {
 
             const storedHash = localStorage.getItem('qxvault-credential-hash');
             if (storedHash) {
-                if (parseInt(storedHash) === credentialHash) {
-                    console.log('✓ Credential consistency verified - same credential as before');
+                if (parseInt(storedHash, 10) === credentialHash) {
+                    qxlog('✓ Credential consistency verified - same credential as before');
                     return true;
                 } else {
                     console.warn('⚠ Credential mismatch detected - different credential than before');
@@ -705,7 +789,7 @@ function initializeComponents() {
                 }
             } else {
                 localStorage.setItem('qxvault-credential-hash', credentialHash.toString());
-                console.log('✓ Credential hash stored for future verification');
+                qxlog('✓ Credential hash stored for future verification');
                 return true;
             }
         }
@@ -716,18 +800,18 @@ function initializeComponents() {
     verifyCredentialConsistency();
 
     // Event listeners
-    console.log('🔧 Setting up event listeners...');
+    qxlog('🔧 Setting up event listeners...');
 
     const hardwareBtn = document.getElementById('generateHardwareBtn');
     const basicBtn = document.getElementById('generateBasicBtn');
     const copyBtn = document.getElementById('copyBtn');
     const clearBtn = document.getElementById('clearBtn');
 
-    console.log('🔍 Button status:');
-    console.log('- Hardware button found:', !!hardwareBtn);
-    console.log('- Basic button found:', !!basicBtn);
-    console.log('- Copy button found:', !!copyBtn);
-    console.log('- Clear button found:', !!clearBtn);
+    qxlog('🔍 Button status:');
+    qxlog('- Hardware button found:', !!hardwareBtn);
+    qxlog('- Basic button found:', !!basicBtn);
+    qxlog('- Copy button found:', !!copyBtn);
+    qxlog('- Clear button found:', !!clearBtn);
 
     if (!hardwareBtn || !basicBtn) {
         console.error('❌ Critical buttons not found! Hardware:', !!hardwareBtn, 'Basic:', !!basicBtn);
@@ -736,20 +820,20 @@ function initializeComponents() {
 
     // Hardware password generation
     if (hardwareBtn) {
-        console.log('🔐 Attaching hardware button listener...');
+        qxlog('🔐 Attaching hardware button listener...');
         hardwareBtn.addEventListener('click', async () => {
-            console.log('🔐 Hardware button clicked!');
-            showStatus('Hardware button clicked - starting generation...', 'info');
             const passphrase = document.getElementById('masterPassphrase').value;
             const siteName = document.getElementById('siteName').value;
             const userEmail = document.getElementById('userEmail').value;
-            const passwordLength = parseInt(document.getElementById('passwordLength').value);
-            const quantumLevel = parseInt(document.getElementById('quantumLevel').value);
+            const passwordLength = parseInt(document.getElementById('passwordLength').value, 10);
+            const quantumLevel = parseInt(document.getElementById('quantumLevel').value, 10);
 
             if (!passphrase || !siteName) {
                 showStatus('Please fill in all required fields', 'error');
                 return;
             }
+
+            if (generationBusy) return;
 
             // Validate WebAuthn environment
             const validation = validateWebAuthnEnvironment();
@@ -759,6 +843,8 @@ function initializeComponents() {
                 showStatus(errorMsg, 'error');
                 return;
             }
+
+            setBusy(true);
 
             // Enhanced mobile detection
             const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
@@ -780,7 +866,12 @@ function initializeComponents() {
                         showStatus('Setting up hardware key authentication...', 'info');
                     }
 
-                    await setupWebAuthn();
+                    try {
+                        await setupWebAuthn();
+                    } catch (setupError) {
+                        showStatus((setupError && setupError.message) || 'Hardware setup failed. Please try again or use "Generate QX Normal Pass".', 'error');
+                        return;
+                    }
 
                     if (!isWebAuthnConfigured) {
                         showStatus('Hardware setup failed. Please try again or use "Generate QX Normal Pass".', 'error');
@@ -792,26 +883,7 @@ function initializeComponents() {
                 showStatus('Authenticating with hardware key...', 'info');
                 await authenticateWebAuthn();
 
-                // Generate deterministic device secret from credential ID only (no signature)
-                console.log('Generating device secret for hardware password...');
                 const deviceSecret = await deriveDeviceSecret(webAuthnCredential.credentialIdBytes);
-
-                // Log device secret consistency for debugging
-                const deviceSecretHash = Array.from(new TextEncoder().encode(deviceSecret)).reduce((hash, byte) => {
-                    return ((hash << 5) - hash) + byte;
-                }, 0);
-                console.log('Device secret hash for consistency check:', deviceSecretHash);
-
-                // Store device secret hash for verification
-                const lastDeviceSecretHash = localStorage.getItem('qxvault-last-device-secret-hash');
-                if (lastDeviceSecretHash) {
-                    if (parseInt(lastDeviceSecretHash) === deviceSecretHash) {
-                        console.log('✓ Device secret is consistent with previous generation');
-                    } else {
-                        console.warn('⚠ Device secret has changed from previous generation');
-                    }
-                }
-                localStorage.setItem('qxvault-last-device-secret-hash', deviceSecretHash.toString());
 
                 showStatus('Generating quantum-secure hardware-bound password...', 'info');
 
@@ -829,15 +901,7 @@ function initializeComponents() {
 
                 showStatus('🔐 QX Hardware password generated successfully! (Quantum-secure + Device-bound)', 'success');
 
-                // Auto-clear functionality
-                if (document.getElementById('autoClear').checked) {
-                    setTimeout(() => {
-                        document.getElementById('masterPassphrase').value = '';
-                        document.getElementById('passwordOutput').textContent = 'Click generate to create your quantum-secure password';
-                        document.getElementById('copyBtn').disabled = true;
-                        showStatus('Sensitive data automatically cleared for security', 'info');
-                    }, 300000); // 5 minutes
-                }
+                armAutoClear();
 
             } catch (error) {
                 console.error('Hardware password generation failed:', error);
@@ -856,6 +920,8 @@ function initializeComponents() {
                 }
 
                 showStatus(errorMessage, 'error');
+            } finally {
+                setBusy(false);
             }
         });
     }
@@ -863,23 +929,27 @@ function initializeComponents() {
     // Generate normal password without hardware auth
     if (basicBtn) {
         basicBtn.addEventListener('click', async () => {
-            console.log('🔑 Basic button clicked!');
+            qxlog('🔑 Basic button clicked!');
             const passphrase = document.getElementById('masterPassphrase').value;
             const siteName = document.getElementById('siteName').value;
             const userEmail = document.getElementById('userEmail').value;
-            const passwordLength = parseInt(document.getElementById('passwordLength').value);
-            const quantumLevel = parseInt(document.getElementById('quantumLevel').value);
+            const passwordLength = parseInt(document.getElementById('passwordLength').value, 10);
+            const quantumLevel = parseInt(document.getElementById('quantumLevel').value, 10);
 
             if (!passphrase || !siteName) {
                 showStatus('Please fill in all required fields', 'error');
                 return;
             }
 
+            if (generationBusy) return;
+            setBusy(true);
+
             try {
                 showStatus('Generating QX Normal password (quantum-secure, no hardware binding)...', 'info');
 
-                // Use a simple deterministic device identifier
-                const deviceId = 'qx-normal-' + btoa(navigator.userAgent + navigator.language).substring(0, 16);
+                // Portable constant: identical on every device, stable across
+                // browser updates. The site/passphrase inputs provide uniqueness.
+                const deviceId = 'qxvault-normal-v5';
 
                 const password = await generateQuantumSecurePassword(
                     passphrase,
@@ -895,19 +965,13 @@ function initializeComponents() {
 
                 showStatus('🔑 QX Normal password generated successfully! (Quantum-secure, cross-device compatible)', 'success');
 
-                // Auto-clear functionality
-                if (document.getElementById('autoClear').checked) {
-                    setTimeout(() => {
-                        document.getElementById('masterPassphrase').value = '';
-                        document.getElementById('passwordOutput').textContent = 'Click generate to create your quantum-secure password';
-                        document.getElementById('copyBtn').disabled = true;
-                        showStatus('Sensitive data automatically cleared for security', 'info');
-                    }, 300000); // 5 minutes
-                }
+                armAutoClear();
 
             } catch (error) {
                 console.error('Password generation failed:', error);
                 showStatus('Failed to generate normal password. Please try again.', 'error');
+            } finally {
+                setBusy(false);
             }
         });
     }
@@ -916,10 +980,14 @@ function initializeComponents() {
         copyBtn.addEventListener('click', async () => {
             const password = document.getElementById('passwordOutput').textContent;
 
-            if (password && password !== 'Click generate to create your quantum-secure password') {
+            if (password && password !== 'Fill the fields and hit generate.') {
                 try {
-                    await navigator.clipboard.writeText(password);
-                    showStatus('Password copied to clipboard!', 'success');
+                    const copied = await copyText(password);
+                    if (copied) {
+                        showStatus('Password copied to clipboard!', 'success');
+                    } else {
+                        throw new Error('copy fallback rejected');
+                    }
                 } catch (error) {
                     console.error('Failed to copy password to clipboard:', error);
                     showStatus('Failed to copy password. Please try again or copy manually.', 'error');
@@ -941,16 +1009,17 @@ function initializeComponents() {
             document.getElementById('includeSpecial').checked = true;
             document.getElementById('autoClear').checked = false;
 
-            document.getElementById('passwordOutput').textContent = 'Click generate to create your quantum-secure password';
+            document.getElementById('passwordOutput').textContent = 'Fill the fields and hit generate.';
             document.getElementById('copyBtn').disabled = true;
             document.getElementById('status').classList.add('hidden');
+
+            if (autoClearTimer) { clearTimeout(autoClearTimer); autoClearTimer = 0; }
 
             // Reset WebAuthn state and clear storage
             isWebAuthnConfigured = false;
             webAuthnCredential = null;
             localStorage.removeItem('qxvault-webauthn-credential');
             localStorage.removeItem('qxvault-credential-hash');
-            localStorage.removeItem('qxvault-last-device-secret-hash');
 
             // Update button appearance
             updateHardwareButtonStatus();
@@ -987,78 +1056,6 @@ function initializeComponents() {
     document.querySelectorAll('.faq-answer').forEach(answer => {
         answer.style.display = 'none';
     });
-
-    // Enhanced quantum particle animation
-    function createQuantumParticle() {
-        const particle = document.createElement('div');
-        particle.style.position = 'fixed';
-        particle.style.width = Math.random() * 4 + 2 + 'px';
-        particle.style.height = particle.style.width;
-        particle.style.background = 'var(--md-sys-color-primary)';
-        particle.style.borderRadius = '50%';
-        particle.style.pointerEvents = 'none';
-        particle.style.zIndex = '-1';
-        particle.style.opacity = '0.6';
-        particle.style.filter = 'blur(1px)';
-
-        const x = Math.random() * window.innerWidth;
-        const y = Math.random() * window.innerHeight;
-
-        particle.style.left = x + 'px';
-        particle.style.top = y + 'px';
-
-        document.body.appendChild(particle);
-
-        const duration = Math.random() * 3000 + 2000;
-        const distance = Math.random() * 100 + 50;
-
-        particle.animate([
-            {
-                opacity: 0,
-                transform: 'scale(0) translate(0, 0)',
-                filter: 'blur(2px)'
-            },
-            {
-                opacity: 0.8,
-                transform: 'scale(1) translate(' + (Math.random() * distance - distance / 2) + 'px, ' + (Math.random() * distance - distance / 2) + 'px)',
-                filter: 'blur(0px)'
-            },
-            {
-                opacity: 0,
-                transform: 'scale(0) translate(' + (Math.random() * distance - distance / 2) + 'px, ' + (Math.random() * distance - distance / 2) + 'px)',
-                filter: 'blur(2px)'
-            }
-        ], {
-            duration: duration,
-            easing: 'cubic-bezier(0.25, 0.46, 0.45, 0.94)'
-        }).onfinish = () => {
-            particle.remove();
-        };
-    }
-
-    // Create quantum particles periodically
-    let particleInterval = setInterval(() => {
-        if (Math.random() < 0.3) { // 30% chance every interval
-            createQuantumParticle();
-        }
-    }, 1500);
-
-    // Pause particles when user is inactive
-    let lastActivity = Date.now();
-    document.addEventListener('mousemove', () => { lastActivity = Date.now(); });
-    document.addEventListener('keydown', () => { lastActivity = Date.now(); });
-
-    setInterval(() => {
-        if (Date.now() - lastActivity > 30000) { // 30 seconds of inactivity
-            clearInterval(particleInterval);
-        } else if (!particleInterval) {
-            particleInterval = setInterval(() => {
-                if (Math.random() < 0.3) {
-                    createQuantumParticle();
-                }
-            }, 1500);
-        }
-    }, 5000);
 
     // Keyboard shortcuts
     document.addEventListener('keydown', (e) => {
@@ -1131,5 +1128,98 @@ function initializeComponents() {
         console.error('❌ Initialization error:', initError);
     }
 
-    console.log('✅ QXVault initialized - Clean minimal cyberpunk design ready!');
+    qxlog('QXVault initialized');
+
+    // Brutalist-theme UI enhancements (output meta, footer year, CTA shortcuts, FAQ keys)
+    try {
+        const saveData = navigator.connection && navigator.connection.saveData;
+        if (!saveData) {
+            if ('requestIdleCallback' in window) {
+                requestIdleCallback(() => { loadKyberModule().catch(() => {}); }, { timeout: 4000 });
+            } else {
+                setTimeout(() => { loadKyberModule().catch(() => {}); }, 1500);
+            }
+        }
+
+        ['masterPassphrase', 'siteName', 'userEmail'].forEach((id) => {
+            const field = document.getElementById(id);
+            if (field) {
+                field.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter' && !e.ctrlKey && !e.metaKey && !generationBusy) {
+                        e.preventDefault();
+                        document.getElementById('generateBasicBtn').click();
+                    }
+                });
+            }
+        });
+
+        const yearEl = document.getElementById('year');
+        if (yearEl) yearEl.textContent = String(new Date().getFullYear());
+
+        const menuBtn = document.getElementById('mobileMenuBtn');
+        const navTabsEl = document.getElementById('navTabs');
+        if (menuBtn && navTabsEl) {
+            menuBtn.addEventListener('click', () => {
+                menuBtn.setAttribute('aria-expanded', navTabsEl.classList.contains('mobile-open') ? 'true' : 'false');
+            });
+        }
+
+        document.querySelectorAll('[data-goto-generator]').forEach((el) => {
+            el.addEventListener('click', () => {
+                document.querySelectorAll('.nav-tab').forEach((t) => t.classList.remove('active'));
+                document.querySelectorAll('.tab-content').forEach((c) => c.classList.remove('active'));
+                const homeTab = document.querySelector('.nav-tab[data-tab="home"]');
+                if (homeTab) homeTab.classList.add('active');
+                document.getElementById('home').classList.add('active');
+                const target = document.getElementById('generator');
+                if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                const pass = document.getElementById('masterPassphrase');
+                if (pass) pass.focus({ preventScroll: true });
+            });
+        });
+
+        document.querySelectorAll('[data-goto-tab]').forEach((el) => {
+            el.addEventListener('click', () => {
+                const tab = el.getAttribute('data-goto-tab');
+                const navBtn = document.querySelector('.nav-tab[data-tab="' + tab + '"]');
+                if (navBtn) navBtn.click();
+            });
+        });
+
+        document.querySelectorAll('.faq-question').forEach((q) => {
+            q.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    q.click();
+                }
+            });
+        });
+
+        const outputEl = document.getElementById('passwordOutput');
+        const metaEl = document.getElementById('passwordMeta');
+        const entropyEl = document.getElementById('entropyMeta');
+        const placeholder = 'Fill the fields and hit generate.';
+        function refreshMeta() {
+            if (!outputEl) return;
+            const value = outputEl.textContent || '';
+            const hasValue = value && value !== placeholder;
+            outputEl.classList.toggle('has-value', !!hasValue);
+            if (!hasValue) {
+                if (metaEl) metaEl.textContent = 'No output yet.';
+                if (entropyEl) entropyEl.textContent = '';
+                return;
+            }
+            const special = document.getElementById('includeSpecial');
+            const charset = (special && special.checked) ? 88 : 62;
+            const bits = Math.round(value.length * Math.log2(charset));
+            if (metaEl) metaEl.textContent = value.length + ' chars · ' + charset + '-symbol set';
+            if (entropyEl) entropyEl.textContent = '~' + bits + ' bits entropy';
+        }
+        if (outputEl && 'MutationObserver' in window) {
+            new MutationObserver(refreshMeta).observe(outputEl, { childList: true, characterData: true, subtree: true });
+        }
+        refreshMeta();
+    } catch (enhError) {
+        console.error('UI enhancement init failed:', enhError);
+    }
 }
