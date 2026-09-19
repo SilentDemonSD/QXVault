@@ -1,0 +1,6 @@
+Word list source: EFF Large Wordlist for Diceware passphrases
+(7,776 words, "abacus" through "zoom"), published by the
+Electronic Frontier Foundation at https://www.eff.org/dice.
+
+Converted to a JavaScript module (words.js) without modification
+to the word order or contents. See the EFF page for license terms.

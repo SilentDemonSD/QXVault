@@ -3,7 +3,7 @@ let webAuthnCredential = null;
 let generationBusy = false;
 
 const QX_DEBUG = typeof location !== 'undefined' && location.hash === '#qx-debug';
-function qxlog(...args) { if (QX_DEBUG) qxlog(...args); }
+function qxlog(...args) { if (QX_DEBUG) console.log(...args); }
 
 function setBusy(busy) {
     generationBusy = busy;
@@ -11,6 +11,55 @@ function setBusy(busy) {
         const el = document.getElementById(id);
         if (el) el.disabled = busy;
     }
+}
+
+function setOutputActions(enabled) {
+    document.getElementById('copyBtn').disabled = !enabled;
+    const qr = document.getElementById('qrBtn');
+    if (qr) qr.disabled = !enabled;
+}
+
+let outputFingerprint = '';
+let lastDeviceSecret = '';
+
+function cyrb53(str, seed = 0) {
+    let h1 = 0xdeadbeef ^ seed, h2 = 0x41c6ce57 ^ seed;
+    for (let i = 0; i < str.length; i++) {
+        const ch = str.charCodeAt(i);
+        h1 = Math.imul(h1 ^ ch, 2654435761);
+        h2 = Math.imul(h2 ^ ch, 1597334677);
+    }
+    h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+    h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+    return (h2 >>> 0).toString(16).padStart(8, '0') + (h1 >>> 0).toString(16).padStart(8, '0');
+}
+
+function hasOutput() {
+    const out = document.getElementById('passwordOutput');
+    return !!out && out.textContent !== 'Fill the fields and hit generate.';
+}
+
+function currentFingerprint(deviceSecret) {
+    const v = (id) => { const el = document.getElementById(id); return el ? el.value : ''; };
+    return cyrb53([
+        v('masterPassphrase'), v('siteName'), v('userEmail'),
+        v('passwordLength'), getCharsetMode(), v('quantumLevel'), deviceSecret || ''
+    ].join('\u0000'));
+}
+
+function refreshStale() {
+    const out = document.getElementById('passwordOutput');
+    const note = document.getElementById('staleNote');
+    const stale = hasOutput() && outputFingerprint !== '' &&
+        currentFingerprint(lastDeviceSecret) !== outputFingerprint;
+    if (out) out.classList.toggle('stale', stale);
+    if (note) note.textContent = stale ? 'Inputs changed — regenerate for the matching password.' : '';
+}
+
+function markOutputFresh(deviceSecret) {
+    lastDeviceSecret = deviceSecret || '';
+    outputFingerprint = currentFingerprint(lastDeviceSecret);
+    refreshStale();
 }
 
 const UTF8 = new TextEncoder();
@@ -25,18 +74,63 @@ function concatBytes(...parts) {
 }
 
 let autoClearTimer = 0;
+let autoClearTick = 0;
+
+function autoClearDelayMs() {
+    const sel = document.getElementById('autoClearAfter');
+    const secs = sel ? parseInt(sel.value, 10) : 300;
+    return (Number.isFinite(secs) && secs > 0 ? secs : 300) * 1000;
+}
+
+function fmtCountdown(ms) {
+    const s = Math.max(0, Math.ceil(ms / 1000));
+    return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+}
+
+function hideQRModal() {
+    const modal = document.getElementById('qrModal');
+    if (modal && !modal.classList.contains('hidden')) {
+        modal.classList.add('hidden');
+        const canvas = document.getElementById('qrCanvas');
+        if (canvas) {
+            const ctx = canvas.getContext('2d');
+            if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
+        }
+    }
+}
+
+function clearSensitiveData() {
+    if (autoClearTimer) { clearTimeout(autoClearTimer); autoClearTimer = 0; }
+    if (autoClearTick) { clearInterval(autoClearTick); autoClearTick = 0; }
+    outputFingerprint = '';
+    lastDeviceSecret = '';
+    const pass = document.getElementById('masterPassphrase');
+    if (pass) pass.value = '';
+    document.getElementById('passwordOutput').textContent = 'Fill the fields and hit generate.';
+    setOutputActions(false);
+    hideQRModal();
+    const note = document.getElementById('autoClearNote');
+    if (note) note.textContent = '';
+}
 
 function armAutoClear() {
     if (autoClearTimer) { clearTimeout(autoClearTimer); autoClearTimer = 0; }
+    if (autoClearTick) { clearInterval(autoClearTick); autoClearTick = 0; }
     const toggle = document.getElementById('autoClear');
+    const note = document.getElementById('autoClearNote');
+    if (note) note.textContent = '';
     if (!toggle || !toggle.checked) return;
+    const delay = autoClearDelayMs();
+    const deadline = Date.now() + delay;
+    const render = () => { if (note) note.textContent = 'Auto-clear in ' + fmtCountdown(deadline - Date.now()); };
+    render();
+    autoClearTick = setInterval(render, 1000);
     autoClearTimer = setTimeout(() => {
         autoClearTimer = 0;
-        document.getElementById('masterPassphrase').value = '';
-        document.getElementById('passwordOutput').textContent = 'Fill the fields and hit generate.';
-        document.getElementById('copyBtn').disabled = true;
+        if (autoClearTick) { clearInterval(autoClearTick); autoClearTick = 0; }
+        clearSensitiveData();
         showStatus('Sensitive data automatically cleared for security', 'info');
-    }, 300000); // 5 minutes
+    }, delay);
 }
 
 async function copyText(text) {
@@ -51,6 +145,7 @@ async function copyText(text) {
         ta.style.opacity = '0';
         document.body.appendChild(ta);
         ta.select();
+        try { ta.setSelectionRange(0, ta.value.length); } catch { /* iOS may throw */ }
         let ok = false;
         try { ok = document.execCommand('copy'); } catch { ok = false; }
         ta.remove();
@@ -262,12 +357,80 @@ async function generateQuantumSecurePassword(passphrase, site, email, deviceSecr
     const pqcSeed = new Uint8Array(derivedBits, 0, 64); // First 64 bytes
     const sharedSecret = await runKyberKEM(pqcSeed, quantumLevel);
 
-    const includeSpecial = document.getElementById('includeSpecial').checked;
-    const chars = includeSpecial
-        ? 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()_+-=[]{}|;:,.<>?'
-        : 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    const mode = getCharsetMode();
+    if (mode === 'words') {
+        return renderWords(sharedSecret, length, site);
+    }
+    const chars = CHARSETS[mode] || CHARSETS.full;
 
     return renderPassword(sharedSecret, length, site, chars);
+}
+
+const CHARSETS = {
+    full: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()_+-=[]{}|;:,.<>?',
+    standard: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789',
+    pin: '0123456789'
+};
+
+function getCharsetMode() {
+    const el = document.querySelector('input[name="charset"]:checked');
+    return el ? el.value : 'full';
+}
+
+let wordsPromise = null;
+
+function loadWords() {
+    if (!wordsPromise) {
+        wordsPromise = import('/vendor/eff/words.js').then((mod) => mod.WORDS);
+        wordsPromise.catch(() => { wordsPromise = null; });
+    }
+    return wordsPromise;
+}
+
+async function makeHKDFStream(sharedSecret, infoBase) {
+    const keyMaterial = await crypto.subtle.importKey('raw', sharedSecret, { name: 'HKDF' }, false, ['deriveBits']);
+    let block = new Uint8Array(0);
+    let pos = 0;
+    let counter = 0;
+    return async function nextByte() {
+        if (pos >= block.length) {
+            const derivedBits = await crypto.subtle.deriveBits(
+                {
+                    name: 'HKDF',
+                    hash: 'SHA-256',
+                    salt: UTF8.encode('password-salt'),
+                    info: UTF8.encode(infoBase + '#' + counter)
+                },
+                keyMaterial,
+                512 // 64 bytes per block
+            );
+            block = new Uint8Array(derivedBits);
+            pos = 0;
+            counter++;
+        }
+        return block[pos++];
+    };
+}
+
+async function renderWords(sharedSecret, length, site) {
+    const words = await loadWords();
+    const COUNT = words.length;
+    const ACCEPT = Math.floor(65536 / COUNT) * COUNT;
+    const nextByte = await makeHKDFStream(sharedSecret, 'QXVault-Password-v5-' + site + '#words');
+    async function nextIndex() {
+        for (;;) {
+            const v = ((await nextByte()) << 8) | (await nextByte());
+            if (v < ACCEPT) return v % COUNT;
+        }
+    }
+    const picked = [];
+    let total = 0;
+    while (picked.length === 0 || total < length) {
+        const w = words[await nextIndex()];
+        picked.push(w);
+        total += w.length + 1;
+    }
+    return picked.join('-');
 }
 
 // Real Post-Quantum Kyber-768 KEM (WASM), derandomized from the PBKDF2-derived seed
@@ -493,11 +656,11 @@ function initializeComponents() {
     // Tab management with mobile support
     document.querySelectorAll('.nav-tab').forEach(tab => {
         tab.addEventListener('click', (e) => {
-            const targetTab = e.target.getAttribute('data-tab');
+            const targetTab = e.currentTarget.getAttribute('data-tab');
 
             // Update active tab
             document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
-            e.target.classList.add('active');
+            e.currentTarget.classList.add('active');
 
             // Show target content
             document.querySelectorAll('.tab-content').forEach(content => {
@@ -839,7 +1002,7 @@ function initializeComponents() {
             const validation = validateWebAuthnEnvironment();
             if (!validation.isSupported) {
                 console.error('WebAuthn validation failed:', validation.issues);
-                const errorMsg = '❌ Hardware authentication not available: ' + validation.issues[0] + '. Try: ' + validation.recommendations[0];
+                const errorMsg = 'Hardware authentication not available: ' + validation.issues[0] + '. Try: ' + validation.recommendations[0];
                 showStatus(errorMsg, 'error');
                 return;
             }
@@ -896,10 +1059,11 @@ function initializeComponents() {
                     quantumLevel
                 );
 
-                document.getElementById('passwordOutput').textContent = password;
-                document.getElementById('copyBtn').disabled = false;
+            document.getElementById('passwordOutput').textContent = password;
+            setOutputActions(true);
+            markOutputFresh(deviceSecret);
 
-                showStatus('🔐 QX Hardware password generated successfully! (Quantum-secure + Device-bound)', 'success');
+            showStatus('Hardware password generated — quantum-secure, device-bound.', 'success');
 
                 armAutoClear();
 
@@ -960,10 +1124,11 @@ function initializeComponents() {
                     quantumLevel
                 );
 
-                document.getElementById('passwordOutput').textContent = password;
-                document.getElementById('copyBtn').disabled = false;
+            document.getElementById('passwordOutput').textContent = password;
+            setOutputActions(true);
+            markOutputFresh(deviceId);
 
-                showStatus('🔑 QX Normal password generated successfully! (Quantum-secure, cross-device compatible)', 'success');
+            showStatus('Normal password generated — quantum-secure, portable.', 'success');
 
                 armAutoClear();
 
@@ -1006,14 +1171,12 @@ function initializeComponents() {
             document.getElementById('lengthValue').textContent = '32';
             document.getElementById('quantumLevel').value = '3';
             document.getElementById('quantumLevelValue').textContent = '3';
-            document.getElementById('includeSpecial').checked = true;
+            const fullRadio = document.querySelector('input[name="charset"][value="full"]');
+            if (fullRadio) fullRadio.checked = true;
             document.getElementById('autoClear').checked = false;
 
-            document.getElementById('passwordOutput').textContent = 'Fill the fields and hit generate.';
-            document.getElementById('copyBtn').disabled = true;
+            clearSensitiveData();
             document.getElementById('status').classList.add('hidden');
-
-            if (autoClearTimer) { clearTimeout(autoClearTimer); autoClearTimer = 0; }
 
             // Reset WebAuthn state and clear storage
             isWebAuthnConfigured = false;
@@ -1057,6 +1220,26 @@ function initializeComponents() {
         answer.style.display = 'none';
     });
 
+    // Wipe secrets when the tab is backgrounded (if auto-clear is on and
+    // anything is showing). Announce it when the user comes back.
+    let clearedInBackground = false;
+    document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) {
+            if (clearedInBackground) {
+                clearedInBackground = false;
+                showStatus('Sensitive data was cleared while the tab was hidden', 'info');
+            }
+            return;
+        }
+        const toggle = document.getElementById('autoClear');
+        const output = document.getElementById('passwordOutput');
+        if (toggle && toggle.checked && output &&
+            output.textContent !== 'Fill the fields and hit generate.') {
+            clearSensitiveData();
+            clearedInBackground = true;
+        }
+    });
+
     // Keyboard shortcuts
     document.addEventListener('keydown', (e) => {
         if (e.ctrlKey || e.metaKey) {
@@ -1082,7 +1265,7 @@ function initializeComponents() {
     });
 
     // Auto-save form data (except sensitive fields)
-    const formFields = ['siteName', 'userEmail', 'passwordLength', 'includeSpecial', 'quantumLevel', 'autoClear'];
+    const formFields = ['siteName', 'userEmail', 'passwordLength', 'quantumLevel', 'autoClear', 'autoClearAfter'];
 
     formFields.forEach(fieldId => {
         const field = document.getElementById(fieldId);
@@ -1111,6 +1294,43 @@ function initializeComponents() {
         }
     });
 
+    // Persist + restore the character-set radio group
+    document.querySelectorAll('input[name="charset"]').forEach((radio) => {
+        radio.addEventListener('change', () => {
+            localStorage.setItem('charsetMode', getCharsetMode());
+            refreshStale();
+        });
+    });
+    const savedCharset = localStorage.getItem('charsetMode');
+    if (savedCharset) {
+        const radio = document.querySelector('input[name="charset"][value="' + savedCharset + '"]');
+        if (radio) radio.checked = true;
+    }
+
+    // Mark the displayed password stale when its inputs change; disarm the
+    // auto-clear countdown when the user opts out or changes the delay.
+    ['masterPassphrase', 'siteName', 'userEmail', 'passwordLength', 'quantumLevel'].forEach((id) => {
+        const field = document.getElementById(id);
+        if (field) field.addEventListener('input', refreshStale);
+    });
+    const autoClearToggle = document.getElementById('autoClear');
+    const autoClearDelay = document.getElementById('autoClearAfter');
+    if (autoClearToggle) {
+        autoClearToggle.addEventListener('change', () => {
+            if (!autoClearToggle.checked) {
+                if (autoClearTimer) { clearTimeout(autoClearTimer); autoClearTimer = 0; }
+                if (autoClearTick) { clearInterval(autoClearTick); autoClearTick = 0; }
+                const note = document.getElementById('autoClearNote');
+                if (note) note.textContent = '';
+            } else if (hasOutput()) {
+                armAutoClear();
+            }
+        });
+    }
+    if (autoClearDelay) {
+        autoClearDelay.addEventListener('change', () => { if (hasOutput()) armAutoClear(); });
+    }
+
     // Final initialization after all event listeners are set up
     try {
         updateHardwareButtonStatus();
@@ -1118,9 +1338,9 @@ function initializeComponents() {
             const isConsistent = verifyCredentialConsistency();
             setTimeout(() => {
                 if (isConsistent) {
-                    showStatus('✅ Hardware authentication ready! Device credential verified.', 'success');
+                    showStatus('Hardware authentication ready — device credential verified.', 'success');
                 } else {
-                    showStatus('⚠️ Hardware authentication ready, but credential changed. Will re-sync on first use.', 'info');
+                    showStatus('Hardware authentication ready, but the credential changed. Will re-sync on first use.', 'info');
                 }
             }, 1000);
         }
@@ -1209,16 +1429,224 @@ function initializeComponents() {
                 if (entropyEl) entropyEl.textContent = '';
                 return;
             }
-            const special = document.getElementById('includeSpecial');
-            const charset = (special && special.checked) ? 88 : 62;
-            const bits = Math.round(value.length * Math.log2(charset));
-            if (metaEl) metaEl.textContent = value.length + ' chars · ' + charset + '-symbol set';
+            const mode = getCharsetMode();
+            let meta = '';
+            let bits = 0;
+            if (mode === 'words') {
+                const n = value.split('-').length;
+                bits = Math.round(n * Math.log2(7776));
+                meta = value.length + ' chars · ' + n + ' words';
+            } else {
+                const charset = mode === 'pin' ? 10 : (mode === 'standard' ? 62 : 88);
+                bits = Math.round(value.length * Math.log2(charset));
+                meta = value.length + ' chars · ' + charset + '-symbol set';
+            }
+            if (metaEl) metaEl.textContent = meta;
             if (entropyEl) entropyEl.textContent = '~' + bits + ' bits entropy';
         }
         if (outputEl && 'MutationObserver' in window) {
             new MutationObserver(refreshMeta).observe(outputEl, { childList: true, characterData: true, subtree: true });
         }
         refreshMeta();
+
+        // Dice: random six-word master passphrase (true random, never derived)
+        const diceBtn = document.getElementById('diceBtn');
+        if (diceBtn) {
+            diceBtn.addEventListener('click', async () => {
+                try {
+                    const words = await loadWords();
+                    const COUNT = words.length;
+                    const ACCEPT = Math.floor(65536 / COUNT) * COUNT;
+                    const picked = [];
+                    while (picked.length < 6) {
+                        const buf = crypto.getRandomValues(new Uint16Array(16));
+                        for (const v of buf) {
+                            if (picked.length >= 6) break;
+                            if (v < ACCEPT) picked.push(words[v % COUNT]);
+                        }
+                    }
+                    const field = document.getElementById('masterPassphrase');
+                    if (field.value !== '' && !window.confirm('Replace the current passphrase with a random one?')) {
+                        return;
+                    }
+                    field.value = picked.join('-');
+                    field.dispatchEvent(new Event('input'));
+                    field.focus();
+                    showStatus('Random passphrase rolled. Write it down somewhere safe — it cannot be recovered.', 'info');
+                } catch {
+                    showStatus('Word list failed to load. Check your connection and retry.', 'error');
+                }
+            });
+        }
+
+        // Version bump: site → site-v2 → site-v3 …
+        const bumpBtn = document.getElementById('versionBumpBtn');
+        const siteField = document.getElementById('siteName');
+        if (bumpBtn && siteField) {
+            bumpBtn.addEventListener('click', () => {
+                const v = siteField.value;
+                if (!v) return;
+                const m = v.match(/-v(\d+)$/);
+                siteField.value = m ? v.slice(0, m.index) + '-v' + (parseInt(m[1], 10) + 1) : v + '-v2';
+                siteField.dispatchEvent(new Event('input'));
+            });
+        }
+
+        // Site profiles: remembered preferences only, never secrets
+        const PROFILE_KEY = 'qxvault-profiles';
+        function readProfiles() {
+            try { return JSON.parse(localStorage.getItem(PROFILE_KEY) || '{}'); }
+            catch { return {}; }
+        }
+        function currentSettings() {
+            return {
+                length: parseInt(document.getElementById('passwordLength').value, 10),
+                charset: getCharsetMode(),
+                level: parseInt(document.getElementById('quantumLevel').value, 10)
+            };
+        }
+        const VALID_CHARSETS = ['full', 'standard', 'pin', 'words'];
+        function sanitizeProfile(p) {
+            if (!p || typeof p !== 'object') return null;
+            return {
+                length: Math.min(64, Math.max(12, parseInt(p.length, 10) || 32)),
+                charset: VALID_CHARSETS.includes(p.charset) ? p.charset : 'full',
+                level: Math.min(5, Math.max(1, parseInt(p.level, 10) || 3))
+            };
+        }
+        function applyProfile(p) {
+            const clean = sanitizeProfile(p);
+            if (!clean) return false;
+            document.getElementById('passwordLength').value = clean.length;
+            document.getElementById('passwordLength').dispatchEvent(new Event('input'));
+            const radio = document.querySelector('input[name="charset"][value="' + clean.charset + '"]');
+            if (radio) {
+                radio.checked = true;
+                radio.dispatchEvent(new Event('change'));
+            }
+            document.getElementById('quantumLevel').value = clean.level;
+            document.getElementById('quantumLevel').dispatchEvent(new Event('input'));
+            return true;
+        }
+        function renderProfiles() {
+            const list = document.getElementById('profileList');
+            if (!list) return;
+            const profiles = readProfiles();
+            const keys = Object.keys(profiles).sort();
+            list.innerHTML = '';
+            for (const key of keys) {
+                const item = document.createElement('div');
+                item.className = 'profile-item';
+                const name = document.createElement('strong');
+                name.textContent = key;
+                name.style.cursor = 'pointer';
+                name.title = 'Apply profile';
+                name.addEventListener('click', () => { applyProfile(profiles[key]); });
+                const tag = document.createElement('span');
+                tag.className = 'tag';
+                const p = sanitizeProfile(profiles[key]) || { length: '?', charset: '?', level: '?' };
+                tag.textContent = p.length + ' · ' + p.charset + ' · L' + p.level;
+                const spacer = document.createElement('span');
+                spacer.className = 'spacer';
+                const del = document.createElement('button');
+                del.type = 'button';
+                del.className = 'profile-del';
+                del.textContent = '×';
+                del.setAttribute('aria-label', 'Delete profile for ' + key);
+                del.addEventListener('click', () => {
+                    const next = readProfiles();
+                    delete next[key];
+                    try { localStorage.setItem(PROFILE_KEY, JSON.stringify(next)); } catch { /* storage unavailable */ }
+                    renderProfiles();
+                });
+                item.append(name, tag, spacer, del);
+                list.appendChild(item);
+            }
+        }
+        const saveProfileBtn = document.getElementById('saveProfileBtn');
+        if (saveProfileBtn && siteField) {
+            saveProfileBtn.addEventListener('click', () => {
+                const key = siteField.value.trim().toLowerCase();
+                if (!key) {
+                    showStatus('Enter a site name first, then save its profile.', 'error');
+                    return;
+                }
+                const profiles = readProfiles();
+                profiles[key] = currentSettings();
+                try {
+                    localStorage.setItem(PROFILE_KEY, JSON.stringify(profiles));
+                    renderProfiles();
+                    showStatus('Profile saved for ' + key + '. It applies automatically on match.', 'success');
+                } catch {
+                    showStatus('Could not save profile (storage unavailable).', 'error');
+                }
+            });
+            siteField.addEventListener('input', () => {
+                const key = siteField.value.trim().toLowerCase();
+                if (key) applyProfile(readProfiles()[key]);
+            });
+        }
+        renderProfiles();
+
+        // QR handoff modal
+        let qrModulePromise = null;
+        function loadQR() {
+            if (!qrModulePromise) {
+                qrModulePromise = import('/vendor/qr/qrcode.js');
+                qrModulePromise.catch(() => { qrModulePromise = null; });
+            }
+            return qrModulePromise;
+        }
+        const qrModal = document.getElementById('qrModal');
+        const qrCanvas = document.getElementById('qrCanvas');
+        const qrBtn = document.getElementById('qrBtn');
+        function closeQR() { hideQRModal(); }
+        if (qrBtn && qrModal && qrCanvas) {
+            qrBtn.addEventListener('click', async () => {
+                const text = document.getElementById('passwordOutput').textContent;
+                if (!text || text === placeholder) return;
+                try {
+                    const qr = await loadQR();
+                    qr.drawQR(qrCanvas, text, 'M');
+                    qrModal.classList.remove('hidden');
+                    document.getElementById('qrCloseBtn').focus();
+                } catch {
+                    showStatus('Could not render QR code for this output.', 'error');
+                }
+            });
+            function closeQRAndRefocus() {
+                closeQR();
+                if (qrBtn) qrBtn.focus({ preventScroll: true });
+            }
+            document.getElementById('qrCloseBtn').addEventListener('click', closeQRAndRefocus);
+            qrModal.addEventListener('click', (e) => { if (e.target === qrModal) closeQRAndRefocus(); });
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape' && !qrModal.classList.contains('hidden')) closeQRAndRefocus();
+            });
+            qrModal.addEventListener('keydown', (e) => {
+                if (e.key !== 'Tab' || qrModal.classList.contains('hidden')) return;
+                const focusable = Array.from(
+                    qrModal.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')
+                ).filter((el) => !el.disabled && el.offsetParent !== null);
+                if (focusable.length === 0) { e.preventDefault(); return; }
+                const first = focusable[0];
+                const last = focusable[focusable.length - 1];
+                if (e.shiftKey && document.activeElement === first) {
+                    e.preventDefault();
+                    last.focus();
+                } else if (!e.shiftKey && document.activeElement === last) {
+                    e.preventDefault();
+                    first.focus();
+                }
+            });
+        }
+
+        // Offline support: register the service worker where allowed
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js').catch(() => {});
+            });
+        }
     } catch (enhError) {
         console.error('UI enhancement init failed:', enhError);
     }

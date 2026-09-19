@@ -94,15 +94,19 @@ Data handling: the passphrase, generated passwords, site names, and key material
 ## Project structure
 
 ```
-src/worker.js                  Cloudflare Worker: serves static assets, minimal /api shim
-public/index.html              Application shell (7 sections: Generate, About, FAQ,
-                               Compare, Trust, Terms, Build)
-public/script.js               Derivation pipeline, WebAuthn flows, UI logic (~1.2k lines)
-public/style.css               Neo-brutalist theme (dark + light, responsive, reduced-motion
-                               and high-contrast support)
+src/worker.js                  Cloudflare Worker: pure static asset serving
+public/index.html              Application shell (6 sections: Generate, About, FAQ,
+                               Compare, Trust, Terms)
+public/script.js               Derivation pipeline, WebAuthn flows, profiles, UI logic
+public/style.css               Neo-brutalist quantum theme (dark + light, responsive,
+                               reduced-motion and high-contrast support)
+public/sw.js                   Service worker: precache + offline fallback (cache v2+)
+public/manifest.json           PWA manifest; icons in public/icons/
 public/_headers                Cache policy (immutable vendor bundle) + security headers
 public/vendor/pqc-kyber/       Kyber-768 WASM build, JS glue, deterministic-RNG hook,
                                MIT license
+public/vendor/eff/             EFF Large Wordlist (7,776 words) as a JS module
+public/vendor/qr/              Dependency-free QR encoder (byte mode, V1–V5, EC L/M)
 wrangler.toml                  Worker name, compatibility date, assets binding
 .vscode/tasks.json             One-command local dev server
 ```
@@ -114,19 +118,65 @@ There is no `package.json` and no build step: what you see is what ships. The WA
 All tuning lives in `public/script.js` and `public/index.html`:
 
 - **Hardening level** (slider, 1–5): scales PBKDF2 iterations (100k–200k) and DRBG seed-hardening rounds. Higher is slower and stronger.
-- **Password length** (slider, 12–64, default 32) and **character set** (88 symbols with punctuation, 62 without).
-- **Auto-clear**: wipes the passphrase and output from the page five minutes after generation (on by default).
+- **Password length** (slider, 12–64, default 32) and **character set**: Full (88 symbols), Standard (62, no punctuation), PIN (10 digits, for keypads), or Words (memorable hyphenated EFF-word phrase sized to the length setting).
+- **Site profiles**: per-site presets (length, character set, hardening) saved in `localStorage`, auto-applied on site-name match. Preferences only — never secrets.
+- **Helpers**: dice button rolls a random six-word master passphrase; V+1 button rotates the site suffix (`site` → `site-v2` → `site-v3`); QR button renders the output as a scannable code for device transfer.
+- **Auto-clear**: wipes the passphrase, output, and QR code after the selected delay (1 / 5 / 15 min, default 5) — or immediately when the tab is hidden. A live countdown shows under the output; unchecking the switch disarms a pending wipe.
+- **Offline (PWA)**: service worker precaches the shell, WASM, wordlist, and fonts on first visit; subsequent loads work offline. Bump the `CACHE` name in `public/sw.js` with every release that changes precached files.
 - **Cache/security headers** (`public/_headers`): vendor bundle cached immutably for a year; app shell revalidated; `nosniff`, `no-referrer`, `DENY` framing, and camera/microphone/geolocation disabled.
 
 ## Deployment
 
-Cloudflare Workers (recommended):
+Production runs on [Cloudflare Pages](https://pages.cloudflare.com/) at `qxvault.pages.dev`. There is no build step — the deploy directory is uploaded as-is.
+
+### Prerequisites
+
+- [Node.js](https://nodejs.org/) (any active LTS)
+- [Wrangler CLI](https://developers.cloudflare.com/workers/wrangler/): `npm install -g wrangler`
+- A Cloudflare account: `npx wrangler login` (one-time browser OAuth)
+
+### First deploy
 
 ```bash
-wrangler deploy
+git clone <repository-url>
+cd QXVault
+
+# One time: create the Pages project (production branch: main)
+npx wrangler pages project create qxvault --production-branch main
+
+# Ship it — every deploy lands on the same project
+npx wrangler pages deploy public --project-name qxvault
 ```
 
-Any static host also works: serve the `public/` directory and ensure `.wasm` files are delivered as `application/wasm` (required for `WebAssembly.instantiateStreaming`; the loader falls back to `ArrayBuffer` instantiation otherwise).
+The command uploads `public/` (7 files: HTML, CSS, JS, manifest, service worker, WASM, wordlist, QR encoder, icons) and prints a versioned preview URL like `https://<hash>.qxvault.pages.dev`. Deploying from the production branch promotes the build to `https://qxvault.pages.dev` automatically.
+
+### Repeat deploys and previews
+
+```bash
+# Production release (from main)
+npx wrangler pages deploy public --project-name qxvault
+
+# Preview from any branch — production stays untouched
+npx wrangler pages deploy public --project-name qxvault --branch dev
+
+# Inspect what is live
+npx wrangler pages deployment list --project-name qxvault
+```
+
+### Continuous deployment (optional)
+
+For push-to-deploy, connect the GitHub repo in the Cloudflare dashboard (Workers & Pages → Create → Pages → Connect to Git) with framework preset `None`, empty build command, output directory `public`, and production branch `main`. CLI deploys keep working against the same project afterwards.
+
+### What the platform provides
+
+- **`public/_headers`** is honored natively by Pages: the Kyber WASM bundle is cached immutably for a year; app shell revalidates; `nosniff`, `no-referrer`, `DENY` framing, and camera/microphone/geolocation lockdowns apply on every response.
+- **`.wasm` MIME**: Pages serves `application/wasm` out of the box, so `WebAssembly.instantiateStreaming` takes the fast path. On other static hosts, verify the MIME type — the loader falls back to `ArrayBuffer` instantiation otherwise.
+- **HTTPS everywhere**, which also satisfies the secure-context requirement for WebAuthn — Hardware Pass works on the production domain with no extra setup.
+
+### Release discipline
+
+- Bump the `CACHE` name in `public/sw.js` with every release that changes precached files, or clients keep serving the previous bundle from Cache Storage indefinitely.
+- Never change derivation parameters without a versioned migration — see [Password versions](#password-versions).
 
 ## Browser support
 
@@ -180,13 +230,16 @@ Passwords cannot be regenerated without it. There is no recovery path.
 Change the site name, e.g. `gmail.com` → `gmail.com-v2`. The output is unrelated; the passphrase stays the same.
 
 **Does it work offline?**
-After the initial load, generation requires no network access.
+Yes — a service worker precaches the app shell, cryptography, wordlist, and fonts on first visit, so later visits (including fully offline ones) work. Generation itself never needs the network.
 
 **Why run a real KEM if the pipeline is already deterministic?**
 The Kyber round trip binds derivation to a lattice-based hard problem instead of hash-only constructions, and the encapsulate/decapsulate equality check acts as an integrity self-test on the WASM module on every run.
 
 **Can I audit the cryptography?**
 Yes — `public/script.js` (pipeline), `public/vendor/pqc-kyber/kyber.js` plus `pqc_kyber_bg.js` (module loading and RNG injection). Standard primitives throughout: PBKDF2, SHA-256/512, Kyber-768, HKDF, WebAuthn.
+
+**What data does the app keep about me?**
+Only preferences: UI settings, per-site profiles (length/charset/hardening — no secrets), the WebAuthn credential ID (non-secret by design), and the PWA cache. Clear All wipes form state and credentials; profiles can be deleted individually.
 
 ## Contributing
 
@@ -200,4 +253,7 @@ Report security issues via a private channel to the maintainer rather than a pub
 
 ## License
 
-GPL-3.0 — see [LICENSE](LICENSE). The bundled Kyber-768 WASM build is MIT-licensed (© Mitchell Berry); see [`public/vendor/pqc-kyber/LICENSE-MIT`](public/vendor/pqc-kyber/LICENSE-MIT).
+GPL-3.0 — see [LICENSE](LICENSE). Bundled third-party code:
+
+- Kyber-768 WASM build, MIT-licensed (© Mitchell Berry); see [`public/vendor/pqc-kyber/LICENSE-MIT`](public/vendor/pqc-kyber/LICENSE-MIT).
+- EFF Large Wordlist (`public/vendor/eff/words.js`), via the Electronic Frontier Foundation — see [`public/vendor/eff/ATTRIBUTION.txt`](public/vendor/eff/ATTRIBUTION.txt).

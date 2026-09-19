@@ -11,6 +11,9 @@
     <link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Space+Grotesk:wght@400;500;600;700&family=Space+Mono:wght@400;700&family=Material+Icons+Round&display=swap" rel="stylesheet">
     <link rel="modulepreload" href="/vendor/pqc-kyber/kyber.js">
     <link rel="stylesheet" href="/style.css">
+    <link rel="manifest" href="/manifest.json">
+    <link rel="apple-touch-icon" href="/icons/icon-192.png">
+    <link rel="icon" type="image/png" href="/icons/icon-192.png">
     <script src="/script.js" defer></script>
 </head>
 <body>
@@ -45,7 +48,6 @@
                 <button class="nav-tab" data-tab="different">Compare</button>
                 <button class="nav-tab" data-tab="trust">Trust</button>
                 <button class="nav-tab" data-tab="terms">Terms</button>
-                <button class="nav-tab" data-tab="source">Build</button>
             </div>
             <div class="nav-controls">
                 <button class="theme-toggle" onclick="toggleTheme()" id="themeToggle" aria-label="Toggle color theme">
@@ -90,6 +92,10 @@
                                 i
                                 <span class="tooltip">The secret everything derives from. It is stretched with PBKDF2-SHA512, fed through a Kyber-768 KEM, and expanded with HKDF. It never leaves this page.</span>
                             </button>
+                            <button class="mini-btn" id="diceBtn" type="button" aria-label="Generate a random six-word passphrase">
+                                <span class="material-icons-round">casino</span>
+                                <span class="tooltip">Roll a new random six-word passphrase. Use it as a strong master secret — write it down somewhere safe.</span>
+                            </button>
                         </label>
                         <div class="password-input-container">
                             <input type="password" id="masterPassphrase" class="form-input" placeholder="Enter your master passphrase" required autocomplete="current-password" maxlength="512">
@@ -105,6 +111,10 @@
                             <button class="info-btn" type="button" aria-label="About the site name">
                                 i
                                 <span class="tooltip">Scopes the derivation to one service, e.g. github.com. Changing it produces an unrelated password.</span>
+                            </button>
+                            <button class="mini-btn" id="versionBumpBtn" type="button" aria-label="Bump site version for rotation">
+                                V+1
+                                <span class="tooltip">Rotate this password: appends -v2, or increments an existing -vN suffix.</span>
                             </button>
                         </label>
                         <input type="text" id="siteName" class="form-input" placeholder="e.g. github.com" required autocomplete="off" spellcheck="false" maxlength="128">
@@ -159,6 +169,8 @@
                     <div class="output-meta">
                         <span id="passwordMeta">No output yet.</span>
                         <span id="entropyMeta"></span>
+                        <span id="autoClearNote" aria-live="polite"></span>
+                        <span id="staleNote" aria-live="polite"></span>
                     </div>
                 </div>
 
@@ -166,6 +178,10 @@
                     <button type="button" id="copyBtn" class="btn" disabled>
                         <span class="material-icons-round">content_copy</span>
                         Copy password
+                    </button>
+                    <button type="button" id="qrBtn" class="btn" disabled>
+                        <span class="material-icons-round">qr_code_2</span>
+                        QR code
                     </button>
                     <button type="button" id="clearBtn" class="btn">
                         <span class="material-icons-round">clear_all</span>
@@ -210,18 +226,33 @@
 
                         <div class="settings-card">
                             <div class="form-group">
-                                <label class="form-label" for="includeSpecial">
-                                    Special characters
-                                    <button class="info-btn" type="button" aria-label="About special characters">
+                                <span class="form-label" id="charsetLabel">
+                                    Character set
+                                    <button class="info-btn" type="button" aria-label="About character sets">
                                         i
-                                        <span class="tooltip">Adds symbols and punctuation. Disable for sites with restricted character sets.</span>
+                                        <span class="tooltip">Full suits most sites. Standard drops symbols for restricted forms. PIN is digits for keypads. Words renders a memorable hyphenated phrase.</span>
                                     </button>
-                                </label>
-                                <div class="switch-container">
-                                    <input type="checkbox" id="includeSpecial" class="switch-input" checked>
-                                    <div class="switch" aria-hidden="true"></div>
-                                    <span>Symbols + punctuation</span>
+                                </span>
+                                <div class="segmented" role="radiogroup" aria-labelledby="charsetLabel">
+                                    <label class="segment"><input type="radio" name="charset" value="full" checked><span>Full<small>88 symbols</small></span></label>
+                                    <label class="segment"><input type="radio" name="charset" value="standard"><span>Standard<small>62 symbols</small></span></label>
+                                    <label class="segment"><input type="radio" name="charset" value="pin"><span>PIN<small>10 digits</small></span></label>
+                                    <label class="segment"><input type="radio" name="charset" value="words"><span>Words<small>phrase</small></span></label>
                                 </div>
+                            </div>
+                        </div>
+
+                        <div class="settings-card">
+                            <div class="form-group">
+                                <span class="form-label" id="profilesLabel">
+                                    Site profiles
+                                    <button class="info-btn" type="button" aria-label="About site profiles">
+                                        i
+                                        <span class="tooltip">Remember per-site settings (length, character set, hardening). Applied automatically when the site name matches. Preferences only — never secrets.</span>
+                                    </button>
+                                </span>
+                                <button type="button" id="saveProfileBtn" class="btn btn-small">Save current site</button>
+                                <div id="profileList" class="profile-list" aria-live="polite"></div>
                             </div>
                         </div>
 
@@ -251,32 +282,26 @@
                                     Auto-clear
                                     <button class="info-btn" type="button" aria-label="About auto-clear">
                                         i
-                                        <span class="tooltip">Wipes the passphrase and output from the page five minutes after generation.</span>
+                                        <div class="tooltip">Wipes the passphrase, output, and QR code after the selected delay — or immediately when the tab is hidden.</div>
                                     </button>
                                 </label>
                                 <div class="switch-container">
-                                    <input type="checkbox" id="autoClear" class="switch-input" checked>
-                                    <div class="switch" aria-hidden="true"></div>
-                                    <span>Clear after 5 minutes</span>
+                                    <label class="switch-label">
+                                        <input type="checkbox" id="autoClear" class="switch-input" checked>
+                                        <div class="switch" aria-hidden="true"></div>
+                                    </label>
+                                    <div class="select-wrap">
+                                        <select id="autoClearAfter" class="select-input" aria-label="Auto-clear delay">
+                                            <option value="60">1 min</option>
+                                            <option value="300" selected>5 min</option>
+                                            <option value="900">15 min</option>
+                                        </select>
+                                    </div>
                                 </div>
                             </div>
                         </div>
                     </div>
                 </div>
-            </section>
-
-            <section class="card" aria-label="Derivation pipeline">
-                <div class="card-head">
-                    <span class="card-index">03</span>
-                    <h2>Pipeline</h2>
-                    <span class="card-tag">Deterministic</span>
-                </div>
-                <ol class="pipeline">
-                    <li><strong>Stretch</strong><span>PBKDF2-SHA512, per-site salt</span></li>
-                    <li><strong>Encapsulate</strong><span>Kyber-768 KEM in WASM</span></li>
-                    <li><strong>Expand</strong><span>HKDF-SHA256, per-site info</span></li>
-                    <li><strong>Render</strong><span>Map bytes to charset</span></li>
-                </ol>
             </section>
         </div>
 
@@ -512,39 +537,17 @@
             </section>
         </div>
 
-        <!-- Build -->
-        <div id="source" class="tab-content">
-            <section class="card">
-                <div class="card-head">
-                    <span class="card-index">01</span>
-                    <h2>Build</h2>
-                    <span class="card-tag">wrangler</span>
-                </div>
+    </div>
 
-                <h3>Run locally</h3>
-                <pre class="codeblock"><code>git clone &lt;repository-url&gt;
-cd QXVault
-wrangler dev</code></pre>
-                <p>WebAuthn needs a secure context; localhost qualifies.</p>
-
-                <h3>Deploy</h3>
-                <pre class="codeblock"><code>wrangler deploy</code></pre>
-                <p>Any static host also works: serve <code>public/</code> with <code>application/wasm</code> for <code>.wasm</code> files.</p>
-
-                <h3>Layout</h3>
-                <pre class="codeblock"><code>src/worker.js              asset serving + minimal API
-public/index.html          app shell
-public/script.js           pipeline + WebAuthn + UI
-public/style.css           this theme
-public/vendor/pqc-kyber/   Kyber-768 WASM build</code></pre>
-
-                <h3>Verify</h3>
-                <ul class="checklist">
-                    <li>Generate twice with identical inputs — outputs match</li>
-                    <li>Change one input character — output is unrelated</li>
-                    <li>Watch the network tab — zero requests during generation</li>
-                </ul>
-            </section>
+    <div id="qrModal" class="qr-modal hidden" role="dialog" aria-modal="true" aria-label="Password QR code">
+        <div class="qr-box">
+            <div class="card-head card-head-inline">
+                <span class="card-index">QR</span>
+                <h3>Scan to transfer</h3>
+            </div>
+            <canvas id="qrCanvas" width="360" height="360"></canvas>
+            <p class="qr-note">Equivalent to the displayed password. Clear the screen when done.</p>
+            <button type="button" id="qrCloseBtn" class="btn btn-primary">Close</button>
         </div>
     </div>
 
